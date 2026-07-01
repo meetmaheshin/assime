@@ -1,0 +1,44 @@
+# ─── OS / editor ───────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# ─── Secrets / env ─────────────────────────────
+.env
+.env.*
+!.env.example
+*.local
+local.properties
+google-services.json
+serviceAccountKey.json
+*.keystore
+*.jks
+
+# ─── Android / Kotlin ──────────────────────────
+*.apk
+*.aab
+*.ap_
+*.dex
+build/
+.gradle/
+captures/
+.cxx/
+
+# ─── Python / FastAPI ──────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ─── Logs / misc ───────────────────────────────
+*.log
+node_modules/
+dist/

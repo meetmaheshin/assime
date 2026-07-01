@@ -1,0 +1,790 @@
+# Project: JARVIS - AI Personal Assistant
+
+Version: 1.0
+
+---
+
+# Vision
+
+Build an Android-first AI Personal Assistant that behaves like a real executive assistant instead of a chatbot or to-do app.
+
+The assistant should:
+
+- Remember everything the user has committed to.
+- Keep the user accountable.
+- Ask follow-up questions.
+- Learn from previous conversations.
+- Prevent duplicate work.
+- Understand projects instead of isolated tasks.
+- Be proactive instead of reactive.
+- Feel like talking to Jarvis.
+
+The assistant should become smarter every day by remembering history.
+
+---
+
+# Core Philosophy
+
+Traditional To-do Apps
+
+User creates task.
+
+↓
+
+Reminder.
+
+↓
+
+Task completed.
+
+↓
+
+Forgot forever.
+
+Our Assistant
+
+User creates task.
+
+↓
+
+AI understands WHY.
+
+↓
+
+AI remembers forever.
+
+↓
+
+AI follows up.
+
+↓
+
+AI learns.
+
+↓
+
+AI references previous work.
+
+↓
+
+AI becomes a long-term assistant.
+
+---
+
+# Target Platform
+
+Android
+
+Jetpack Compose
+
+Kotlin
+
+Material 3
+
+Dark Mode
+
+Voice First UI
+
+---
+
+# Backend
+
+FastAPI (Python)
+
+REST API
+
+WebSocket (optional)
+
+PostgreSQL
+
+Redis
+
+Firebase Cloud Messaging
+
+---
+
+# AI
+
+OpenAI GPT-5.5 (recommended)
+
+The AI should NOT be called for every reminder.
+
+Use AI only when reasoning is required.
+
+Examples:
+
+✓ Planning
+
+✓ Reflection
+
+✓ Memory search
+
+✓ Breaking tasks
+
+✓ Coaching
+
+✓ Weekly review
+
+Do NOT call AI for:
+
+- simple reminders
+- alarms
+- notifications
+- timers
+
+These should be handled locally.
+
+---
+
+# Primary Goal
+
+The assistant should behave like a human PA.
+
+Example
+
+User
+
+"I need to finish Furmacie homepage."
+
+Assistant
+
+"When do you want to finish it?"
+
+User
+
+"Tomorrow."
+
+Assistant
+
+"Why is it important?"
+
+User
+
+"Client launch."
+
+Assistant stores
+
+Task
+
+Deadline
+
+Importance
+
+Project
+
+Dependencies
+
+Reason
+
+Priority
+
+---
+
+# Morning Briefing
+
+Every morning
+
+Assistant should automatically greet user.
+
+Example
+
+Good morning Mahesh.
+
+Today's priorities
+
+1. Deploy Login Tracking
+
+2. Review Surepass Proposal
+
+3. Finish Homepage
+
+Pending from yesterday
+
+• CIBIL Integration
+
+• Courier Research
+
+Would you like to begin with the highest priority?
+
+---
+
+# Evening Review
+
+Every evening
+
+Assistant asks
+
+What did you complete today?
+
+If user doesn't answer
+
+Ask again later.
+
+When user replies
+
+Assistant updates memory.
+
+---
+
+# Accountability
+
+If task overdue
+
+Assistant
+
+"You planned to finish this yesterday.
+
+What happened?"
+
+Options
+
+Blocked
+
+Forgot
+
+Too busy
+
+Waiting for someone
+
+Not important anymore
+
+Other
+
+Store reason.
+
+---
+
+# Intelligent Reminder
+
+Bad Reminder
+
+Reminder:
+Finish Homepage.
+
+Good Reminder
+
+Reminder
+
+You mentioned the homepage blocks tomorrow's client launch.
+
+Still want to postpone?
+
+---
+
+# Duplicate Detection
+
+If user creates similar task
+
+Assistant should search memory.
+
+Example
+
+User
+
+Create SEO Audit
+
+Assistant
+
+I found a similar task completed last week.
+
+Is this
+
+- same audit
+- new audit
+- follow-up audit
+
+Never blindly duplicate work.
+
+---
+
+# Memory
+
+Assistant remembers forever.
+
+Examples
+
+Projects
+
+People
+
+Ideas
+
+Meetings
+
+Tasks
+
+Deadlines
+
+Notes
+
+Business Decisions
+
+Documents
+
+Goals
+
+Preferences
+
+Recurring Problems
+
+Completed Work
+
+Pending Work
+
+---
+
+# Relationships
+
+Assistant should connect information.
+
+Example
+
+Task
+
+Deploy Payment Gateway
+
+belongs to
+
+Project
+
+Furmacie
+
+Depends on
+
+Payment API
+
+Blocks
+
+Launch
+
+---
+
+# Daily Planning
+
+User
+
+"What should I work on?"
+
+Assistant decides using
+
+Priority
+
+Deadline
+
+Project Importance
+
+Dependencies
+
+Past delays
+
+Available time
+
+Energy level (optional)
+
+---
+
+# Weekly Review
+
+Generate
+
+Completed tasks
+
+Delayed tasks
+
+Projects progressing
+
+Projects stalled
+
+Most common reason for delays
+
+Suggestions
+
+---
+
+# Monthly Review
+
+Achievements
+
+Hours spent
+
+Major completed milestones
+
+Most productive days
+
+Projects abandoned
+
+Recommendations
+
+---
+
+# Voice First
+
+Everything should work via voice.
+
+Examples
+
+Add task
+
+Mark completed
+
+Move to tomorrow
+
+Cancel reminder
+
+What's next
+
+Summarize my day
+
+Create meeting
+
+Call reminder
+
+---
+
+# Notifications
+
+Smart notifications.
+
+Examples
+
+Morning Brief
+
+Lunch Check
+
+Evening Review
+
+Deadline Today
+
+Task overdue
+
+Project stalled
+
+Follow-up reminders
+
+Never spam.
+
+Reminder frequency adapts.
+
+---
+
+# Chat
+
+The entire app is conversational.
+
+Avoid complicated forms.
+
+Instead
+
+User
+
+"I need to finish login tracking."
+
+Assistant asks
+
+When?
+
+Why?
+
+Priority?
+
+Anything blocking it?
+
+---
+
+# Projects
+
+Projects contain
+
+Tasks
+
+Notes
+
+Files
+
+People
+
+Deadlines
+
+Progress
+
+Dependencies
+
+AI Summary
+
+---
+
+# Memory Search
+
+User
+
+"What happened with Surepass?"
+
+Assistant searches history
+
+Returns
+
+Meetings
+
+Tasks
+
+Notes
+
+Emails
+
+Pending actions
+
+---
+
+# Personal Knowledge Base
+
+Assistant becomes user's second brain.
+
+Examples
+
+Where did I save API key?
+
+What courier did I shortlist?
+
+What did client say?
+
+Which logo did I choose?
+
+---
+
+# AI Behaviors
+
+Never hallucinate.
+
+If unsure
+
+Ask user.
+
+Never assume completion.
+
+Always confirm.
+
+Challenge duplicates politely.
+
+Suggest easier paths.
+
+Break large tasks.
+
+Encourage progress.
+
+Never guilt-trip user.
+
+---
+
+# Personality
+
+Professional
+
+Friendly
+
+Motivating
+
+Short answers
+
+No unnecessary fluff
+
+Feels like an executive assistant.
+
+Examples
+
+Good morning.
+
+You're close to finishing Project Alpha.
+
+Only two tasks remain.
+
+Shall we finish it today?
+
+---
+
+# Database
+
+Tables
+
+Users
+
+Projects
+
+Tasks
+
+Reminders
+
+Task History
+
+AI Memories
+
+Meetings
+
+People
+
+Notes
+
+Files
+
+Notifications
+
+Conversation History
+
+---
+
+# Task Fields
+
+Task ID
+
+Title
+
+Description
+
+Project
+
+Priority
+
+Importance
+
+Reason
+
+Deadline
+
+Created Date
+
+Completed Date
+
+Status
+
+Reminder Schedule
+
+Dependencies
+
+Tags
+
+AI Notes
+
+Progress %
+
+History
+
+---
+
+# Future Features
+
+Calendar Sync
+
+Gmail Integration
+
+WhatsApp Integration
+
+Slack
+
+Wear OS
+
+Desktop App
+
+Browser Extension
+
+Email Summaries
+
+Meeting Summaries
+
+Screen Context
+
+Computer Vision
+
+Local LLM Mode
+
+---
+
+# UI
+
+Home
+
+Today's Focus
+
+Pending Tasks
+
+Chat
+
+Projects
+
+Memory
+
+Insights
+
+Settings
+
+---
+
+# Screens
+
+Splash
+
+Authentication
+
+Chat
+
+Task Detail
+
+Project Detail
+
+Timeline
+
+Calendar
+
+Notifications
+
+Settings
+
+Weekly Review
+
+Monthly Review
+
+Memory Search
+
+---
+
+# Success Criteria
+
+The user should feel
+
+"I never forget anything anymore."
+
+"I have someone keeping me accountable."
+
+"My assistant remembers everything."
+
+"It feels like working with a real PA."
+
+The assistant should become more valuable every week because its memory grows over time.
+
+---
+
+# Coding Standards
+
+Use clean architecture.
+
+MVVM
+
+Repository Pattern
+
+Dependency Injection (Hilt)
+
+Coroutines
+
+Room (offline cache)
+
+WorkManager
+
+Material 3
+
+Modular architecture
+
+Unit Tests
+
+Meaningful comments
+
+Scalable folder structure
+
+Production-ready code.
