@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0d1117" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<title>A.A.T.H</title>
+<title>AARTH</title>
 <style>
   :root{
     --bg:#0d1117; --surface:#161b22; --surface2:#1c2330; --line:#2a3441;
@@ -74,6 +74,16 @@
   .p1{background:var(--danger)}.p2{background:var(--warn)}.p3{background:var(--accent)}.p4,.p5{background:var(--muted)}
   .banner{background:linear-gradient(90deg,rgba(240,136,62,.15),transparent);border:1px solid rgba(240,136,62,.4);border-radius:12px;padding:10px 12px;font-size:13px;margin-bottom:14px}
 
+  /* Voice capture card */
+  .capture{background:var(--surface2);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:18px;display:flex;gap:14px;align-items:center}
+  .mic-fab{width:58px;height:58px;flex:0 0 58px;border-radius:50%;font-size:24px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;box-shadow:0 8px 20px rgba(76,141,255,.35)}
+  .mic-fab:active{transform:scale(.95)}
+  .mic-fab.rec{background:var(--danger);box-shadow:0 0 0 0 rgba(248,81,73,.6);animation:ripple 1.3s infinite}
+  @keyframes ripple{0%{box-shadow:0 0 0 0 rgba(248,81,73,.55)}70%{box-shadow:0 0 0 16px rgba(248,81,73,0)}100%{box-shadow:0 0 0 0 rgba(248,81,73,0)}}
+  .cap-title{font-weight:600;font-size:15px}
+  .cap-status{font-size:13px;margin-top:2px}
+
   /* Chat */
   #screen-chat{padding:0}
   .chatlog{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
@@ -110,8 +120,8 @@
 
   <!-- AUTH -->
   <div id="auth">
-    <div class="logo">A.A.T.H</div>
-    <div class="muted" style="margin-top:6px;font-size:14px">Artificial Assistant To Human</div>
+    <div class="logo">AARTH</div>
+    <div class="muted" style="margin-top:6px;font-size:14px">Artificial Assistant &amp; Reconciliation To Human</div>
     <div class="stack">
       <input id="dnameRow" class="hidden" placeholder="Your name" />
       <input id="email" placeholder="Email" type="email" autocomplete="email" />
@@ -127,8 +137,8 @@
   <div id="app" class="hidden">
     <div class="appbar">
       <div>
-        <div class="logo">A.A.T.H</div>
-        <div class="sub" id="appSub">Artificial Assistant To Human</div>
+        <div class="logo">AARTH</div>
+        <div class="sub" id="appSub">Artificial Assistant &amp; Reconciliation To Human</div>
       </div>
       <button class="iconbtn" id="logoutBtn" title="Sign out">⏻</button>
     </div>
@@ -139,6 +149,15 @@
         <div class="pad">
           <div class="greeting" id="greeting">Good day.</div>
           <div class="muted" id="briefSub" style="font-size:14px;margin-bottom:16px">Loading…</div>
+
+          <div class="capture">
+            <button class="mic-fab" id="homeMic" title="Tap and talk to add a task">🎙️</button>
+            <div>
+              <div class="cap-title" id="capTitle">Tap &amp; talk to add a task</div>
+              <div class="cap-status" id="capStatus">Say it naturally — I'll ask back if I need the “why”.</div>
+            </div>
+          </div>
+
           <div id="overdueBanner"></div>
           <div class="h">Today's priorities</div>
           <div id="priorities"><div class="muted">Nothing yet.</div></div>
@@ -150,7 +169,7 @@
         <div class="chatlog" id="chatlog"></div>
         <div class="composer">
           <button class="cbtn" id="micBtn" title="Speak">🎙️</button>
-          <textarea id="chatInput" placeholder="Ask A.A.T.H…"></textarea>
+          <textarea id="chatInput" placeholder="Ask AARTH…"></textarea>
           <button class="cbtn send" id="sendBtn" title="Send">➤</button>
         </div>
       </section>
@@ -326,23 +345,30 @@ async function createTask(skip){
   const d=$("#ntDeadline").value; if(d) body.deadline=new Date(d).toISOString();
   try{
     const res=await api("/tasks",{method:"POST",body});
-    if(res.task===null&&res.possible_duplicates.length){showDup(res.possible_duplicates,body);return;}
+    if(res.task===null&&res.possible_duplicates.length){showDup(res.possible_duplicates,{type:"form",body});return;}
     $("#ntTitle").value="";$("#ntReason").value="";$("#ntDeadline").value="";
     addMsg("ai",`Added “${title}”. I'll keep you accountable.`,[]);
     await loadToday(); showTab("today");
   }catch(e){alert(e.message);}
 }
-function showDup(dupes,body){
-  pendingTask=body;
+let dupCtx=null; // {type:'form', body} | {type:'capture', draft}
+function showDup(dupes,ctx){
+  dupCtx=ctx;
   $("#dupList").innerHTML=dupes.map(d=>`<div class="dupitem"><b>${h(d.title)}</b> <span class="pill">${Math.round(d.similarity*100)}% match</span> <span class="muted">· ${d.status}</span></div>`).join("");
   $("#dupOverlay").classList.remove("hidden");
 }
-$("#dupCancel").onclick=()=>{$("#dupOverlay").classList.add("hidden");pendingTask=null;};
+$("#dupCancel").onclick=()=>{$("#dupOverlay").classList.add("hidden");dupCtx=null;captureDraft=null;setCap("Tap & talk to add a task","Cancelled.");};
 $("#dupNew").onclick=async()=>{
   $("#dupOverlay").classList.add("hidden");
-  if(pendingTask){pendingTask.skip_duplicate_check=true;const b=pendingTask;pendingTask=null;
-    await api("/tasks",{method:"POST",body:b});$("#ntTitle").value="";$("#ntReason").value="";
-    addMsg("ai",`Created “${b.title}” as a new task.`,[]);await loadToday();showTab("today");}
+  const ctx=dupCtx; dupCtx=null; if(!ctx) return;
+  if(ctx.type==="form"){
+    ctx.body.skip_duplicate_check=true;
+    await api("/tasks",{method:"POST",body:ctx.body});
+    $("#ntTitle").value="";$("#ntReason").value="";await loadToday();showTab("today");
+  }else if(ctx.type==="capture"){
+    const res=await api("/tasks/capture",{method:"POST",body:{utterance:"",draft:ctx.draft,skip_duplicate_check:true}});
+    handleCapture(res);
+  }
 };
 
 /* Chat */
@@ -387,6 +413,59 @@ if(SR){rec=new SR();rec.lang="en-US";rec.interimResults=false;
   $("#micBtn").onclick=()=>{try{rec.start();$("#micBtn").classList.add("rec");}catch(_){}}
 }else{$("#micBtn").style.opacity=.4;$("#micBtn").title="Voice not supported here";}
 function speak(t){if(!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(t.replace(/\[.*?\]/g,""));u.rate=1.05;speechSynthesis.cancel();speechSynthesis.speak(u);}
+
+/* ── Voice task capture (Home) ── */
+let captureDraft=null, capListening=false, capText="", capRec=null;
+function setCap(title,status){$("#capTitle").textContent=title; if(status!==undefined)$("#capStatus").textContent=status;}
+if(SR){
+  capRec=new SR(); capRec.lang="en-US"; capRec.continuous=true; capRec.interimResults=true;
+  capRec.onresult=e=>{
+    let fin="",interim="";
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const tr=e.results[i][0].transcript;
+      if(e.results[i].isFinal) fin+=tr+" "; else interim+=tr;
+    }
+    if(fin) capText+=fin;
+    setCap("Listening… tap ✓ when done", (capText+interim).trim()||"…");
+  };
+  capRec.onend=()=>{ if(capListening){ capListening=false; $("#homeMic").classList.remove("rec"); $("#homeMic").textContent="🎙️"; submitCapture(capText.trim()); } };
+}
+$("#homeMic").onclick=()=>{
+  if(!SR){ setCap("Voice not supported here","Use Chrome or Edge for voice capture."); return; }
+  if(!capListening){
+    capText=""; capListening=true;
+    $("#homeMic").classList.add("rec"); $("#homeMic").textContent="✓";
+    setCap("Listening… tap ✓ when done","Speak your task naturally.");
+    try{ capRec.start(); }catch(_){}
+  }else{
+    capListening=false; $("#homeMic").classList.remove("rec"); $("#homeMic").textContent="🎙️";
+    try{ capRec.stop(); }catch(_){}  // onend triggers submitCapture
+  }
+};
+async function submitCapture(text){
+  if(!text){ setCap("Tap & talk to add a task","Didn't catch that — try again."); return; }
+  setCap("Thinking…", "“"+text+"”");
+  try{
+    const res=await api("/tasks/capture",{method:"POST",body:{utterance:text,draft:captureDraft}});
+    handleCapture(res);
+  }catch(e){ setCap("Tap & talk to add a task", e.message); }
+}
+function handleCapture(res){
+  captureDraft=res.draft;
+  if(res.action==="ask"){
+    setCap("🤖 "+res.question,"Tap 🎙️ and answer.");
+    speak(res.question);
+    $("#homeMic").textContent="🎙️";
+  }else if(res.action==="duplicate"){
+    setCap("Possible duplicate","Same, new, or follow-up?");
+    showDup(res.possible_duplicates,{type:"capture",draft:res.draft});
+  }else if(res.action==="created"){
+    captureDraft=null;
+    setCap("✅ Added “"+res.task.title+"”","Tap & talk to add another.");
+    speak("Added "+res.task.title);
+    loadToday();
+  }
+}
 
 if(token){enterApp().catch(logout);}
 </script>

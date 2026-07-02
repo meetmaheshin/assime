@@ -11,6 +11,7 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.task import Task, TaskHistory
 from app.models.user import User
+from app.schemas.capture import CaptureDraft, CaptureRequest, CaptureResponse
 from app.schemas.task import (
     DuplicateMatch,
     OverdueReason,
@@ -19,6 +20,7 @@ from app.schemas.task import (
     TaskOut,
     TaskUpdate,
 )
+from app.services import capture as capture_svc
 from app.services import memory_service
 from app.services.llm import llm
 
@@ -108,6 +110,93 @@ async def create_task(
     await db.commit()
     await db.refresh(task)
     return TaskCreateResult(task=TaskOut.model_validate(task))
+
+
+async def _persist_task(db: AsyncSession, user: User, draft: CaptureDraft) -> Task:
+    task = Task(
+        user_id=user.id, title=draft.title, reason=draft.reason,
+        priority=draft.priority, deadline=draft.deadline,
+        importance="high" if draft.priority == 1 else "medium",
+    )
+    _log(task, "created")
+    db.add(task)
+    await db.flush()
+    probe = f"{draft.title}. {draft.reason or ''}".strip()
+    mem = await memory_service.remember(
+        db, llm, user_id=user.id, kind="task", content=probe,
+        source_type="task", source_id=task.id, commit=False,
+    )
+    task.embedding_id = mem.id
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+_SKIP_REASON = {"no", "skip", "none", "nothing", "n/a", "-"}
+
+
+@router.post("/capture", response_model=CaptureResponse)
+async def capture_task(
+    payload: CaptureRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CaptureResponse:
+    """Conversational (voice) task capture: extract a task from natural speech,
+    ask back for the 'why' if it's missing, then save (with dedupe)."""
+    now = datetime.now(timezone.utc)
+    draft = payload.draft or CaptureDraft()
+    utter = payload.utterance.strip()
+    answering = draft.pending
+
+    # Confirm-create: user accepted a possible-duplicate as new. Persist directly.
+    if payload.skip_duplicate_check and draft.title:
+        task = await _persist_task(db, user, draft)
+        return CaptureResponse(action="created", draft=draft,
+                               task=TaskOut.model_validate(task))
+
+    if answering == "reason":
+        draft.reason = None if utter.lower() in _SKIP_REASON else utter
+        draft.pending = None
+    else:
+        fields = await capture_svc.extract_fields(llm, utter, now)
+        if answering == "title":
+            draft.title = fields["title"] or utter or "New task"
+        else:
+            draft.title = fields["title"]
+        draft.reason = draft.reason or fields["reason"]
+        draft.priority = fields["priority"]
+        draft.deadline = fields["deadline"]
+        draft.pending = None
+
+    # Ask back for what's missing (title, then the 'why') — never guess the why.
+    if not draft.title:
+        draft.pending = "title"
+        return CaptureResponse(action="ask", draft=draft,
+                               question="What would you like me to add?")
+    if not draft.reason and answering != "reason":
+        draft.pending = "reason"
+        return CaptureResponse(
+            action="ask", draft=draft,
+            question=f"Got it — “{draft.title}”. Why does it matter?",
+        )
+
+    # Duplicate detection before saving (never blindly duplicate).
+    if not payload.skip_duplicate_check:
+        probe = f"{draft.title}. {draft.reason or ''}".strip()
+        dupes = await memory_service.find_duplicates(db, llm, user_id=user.id, text=probe)
+        matches = []
+        for mem, sim in dupes:
+            dt = await db.get(Task, mem.source_id) if mem.source_id else None
+            if dt is not None:
+                matches.append(DuplicateMatch(
+                    id=dt.id, title=dt.title, similarity=round(sim, 3), status=dt.status))
+        if matches:
+            return CaptureResponse(action="duplicate", draft=draft,
+                                   possible_duplicates=matches)
+
+    task = await _persist_task(db, user, draft)
+    return CaptureResponse(action="created", draft=draft,
+                           task=TaskOut.model_validate(task))
 
 
 @router.get("/{task_id}", response_model=TaskOut)
