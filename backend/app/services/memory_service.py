@@ -11,6 +11,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.memory import Memory
 from app.services.llm import LLMClient
 
@@ -82,10 +83,12 @@ async def find_duplicates(
     *,
     user_id: uuid.UUID,
     text: str,
-    threshold: float = 0.82,
+    threshold: float | None = None,
     limit: int = 5,
 ) -> list[tuple[Memory, float]]:
     """Task-kind memories similar enough to `text` to warrant a same/new/follow-up
     prompt (PRD duplicate detection). Never blindly duplicate work."""
+    if threshold is None:
+        threshold = settings.duplicate_threshold
     hits = await search(db, llm, user_id=user_id, query=text, kind="task", limit=limit)
     return [(m, sim) for m, sim in hits if sim >= threshold]

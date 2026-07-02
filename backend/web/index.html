@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JARVIS</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --surface2:#1c2330; --line:#2a3441;
+    --text:#e6edf3; --muted:#8b95a5; --accent:#4c8dff; --accent2:#7c5cff;
+    --good:#3fb950; --warn:#f0883e; --danger:#f85149; --radius:16px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;transition:.15s}
+  input,textarea,select{font-family:inherit;background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:11px 13px;font-size:14px;outline:none;width:100%}
+  input:focus,textarea:focus{border-color:var(--accent)}
+  .hidden{display:none!important}
+  .muted{color:var(--muted)}
+  .pill{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--surface2);border:1px solid var(--line)}
+
+  /* ── Auth ── */
+  #auth{height:100vh;display:flex;align-items:center;justify-content:center;background:
+    radial-gradient(1200px 600px at 70% -10%, rgba(124,92,255,.18), transparent),
+    radial-gradient(900px 500px at 10% 110%, rgba(76,141,255,.15), transparent), var(--bg)}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:34px;width:380px;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+  .logo{font-size:30px;font-weight:800;letter-spacing:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .stack{display:flex;flex-direction:column;gap:12px;margin-top:20px}
+  .btn-primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;padding:12px;font-weight:600;font-size:15px}
+  .btn-primary:hover{filter:brightness(1.08)}
+  .link{color:var(--accent);background:none;font-size:13px;padding:4px}
+  .err{color:var(--danger);font-size:13px;min-height:16px}
+
+  /* ── App layout ── */
+  #app{display:grid;grid-template-columns:340px 1fr;height:100vh}
+  aside{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow-y:auto}
+  .brandbar{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  .section{padding:16px 20px;border-bottom:1px solid var(--line)}
+  .section h3{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+  .greeting{font-size:18px;font-weight:700;margin-bottom:4px}
+  .task{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+  .task .t-title{font-weight:600;font-size:14px}
+  .task .t-meta{font-size:12px;color:var(--muted);margin-top:3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .task .t-actions{margin-top:8px;display:flex;gap:6px}
+  .btn-sm{font-size:12px;padding:5px 9px;background:var(--surface);border:1px solid var(--line);color:var(--text)}
+  .btn-sm:hover{border-color:var(--accent)}
+  .btn-done{border-color:var(--good);color:var(--good)}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .p1{background:var(--danger)} .p2{background:var(--warn)} .p3{background:var(--accent)} .p4,.p5{background:var(--muted)}
+
+  main{display:flex;flex-direction:column;height:100vh;min-width:0}
+  .chatlog{flex:1;overflow-y:auto;padding:24px 22px;display:flex;flex-direction:column;gap:14px}
+  .msg{max-width:76%;padding:12px 15px;border-radius:16px;line-height:1.45;font-size:14.5px;white-space:pre-wrap;word-wrap:break-word}
+  .msg.user{align-self:flex-end;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;border-bottom-right-radius:4px}
+  .msg.ai{align-self:flex-start;background:var(--surface2);border:1px solid var(--line);border-bottom-left-radius:4px}
+  .cites{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);font-size:11.5px;color:var(--muted)}
+  .cite{margin-top:3px}
+  .composer{border-top:1px solid var(--line);padding:14px 18px;display:flex;gap:10px;align-items:flex-end;background:var(--surface)}
+  .composer textarea{resize:none;height:46px;max-height:140px}
+  .icon-btn{width:46px;height:46px;flex:0 0 46px;display:flex;align-items:center;justify-content:center;font-size:18px;background:var(--surface2);border:1px solid var(--line);color:var(--text)}
+  .icon-btn:hover{border-color:var(--accent)}
+  .icon-btn.send{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;border:none}
+  .icon-btn.rec{background:var(--danger);color:#fff;border:none;animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+  .tabs{display:flex;gap:6px}
+  .tab{font-size:12px;padding:6px 10px;background:var(--surface2);border:1px solid var(--line);color:var(--muted)}
+  .tab.active{color:var(--text);border-color:var(--accent)}
+
+  /* ── Modal (duplicate detection) ── */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:50}
+  .modal{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:24px;width:440px}
+  .dupitem{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;font-size:13px}
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="auth">
+  <div class="card">
+    <div class="logo">JARVIS</div>
+    <div class="muted" style="margin-top:6px;font-size:13px">Your AI executive assistant</div>
+    <div class="stack">
+      <input id="dnameRow" class="hidden" placeholder="Your name" />
+      <input id="email" placeholder="Email" type="email" />
+      <input id="password" placeholder="Password (min 8 chars)" type="password" />
+      <div class="err" id="authErr"></div>
+      <button class="btn-primary" id="authBtn">Sign in</button>
+      <button class="link" id="authToggle">New here? Create an account</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden">
+  <aside>
+    <div class="brandbar">
+      <span class="logo" style="font-size:20px">JARVIS</span>
+      <button class="btn-sm" id="logoutBtn">Sign out</button>
+    </div>
+
+    <div class="section">
+      <div class="greeting" id="greeting">Good day.</div>
+      <div class="muted" id="briefSub" style="font-size:13px">Loading your day…</div>
+    </div>
+
+    <div class="section">
+      <h3>Today's priorities</h3>
+      <div id="priorities"><div class="muted" style="font-size:13px">Nothing yet.</div></div>
+    </div>
+
+    <div class="section" style="flex:1">
+      <h3>Add a task</h3>
+      <div class="stack" style="margin-top:0;gap:8px">
+        <input id="ntTitle" placeholder="What needs doing?" />
+        <input id="ntReason" placeholder="Why does it matter? (the 'why')" />
+        <div style="display:flex;gap:8px">
+          <select id="ntPriority" style="flex:1">
+            <option value="1">P1 · Critical</option>
+            <option value="2">P2 · High</option>
+            <option value="3" selected>P3 · Normal</option>
+            <option value="4">P4 · Low</option>
+          </select>
+          <input id="ntDeadline" type="date" style="flex:1" />
+        </div>
+        <button class="btn-primary" id="addTaskBtn" style="padding:10px">Add task</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Memory search</h3>
+      <input id="memQuery" placeholder="e.g. what about the client launch?" />
+      <div id="memResults" style="margin-top:8px"></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="brandbar">
+      <div>
+        <div style="font-weight:700">Chat with JARVIS</div>
+        <div class="muted" id="providerNote" style="font-size:12px"></div>
+      </div>
+      <div class="tabs">
+        <button class="tab active" id="ttsTab">🔊 Voice replies: on</button>
+      </div>
+    </div>
+
+    <div class="chatlog" id="chatlog"></div>
+
+    <div class="composer">
+      <button class="icon-btn" id="micBtn" title="Speak">🎙️</button>
+      <textarea id="chatInput" placeholder="Ask JARVIS, or say what you need to do…"></textarea>
+      <button class="icon-btn send" id="sendBtn" title="Send">➤</button>
+    </div>
+  </main>
+</div>
+
+<!-- DUPLICATE MODAL -->
+<div id="dupOverlay" class="overlay hidden">
+  <div class="modal">
+    <h3 style="margin-top:0">I found similar work</h3>
+    <div class="muted" style="font-size:13px">Before I duplicate anything — is this the same, new, or a follow-up?</div>
+    <div id="dupList"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn-sm" id="dupNew" style="flex:1">It's new — create it</button>
+      <button class="btn-sm" id="dupCancel" style="flex:1">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = ""; // same origin
+let token = localStorage.getItem("jarvis_token") || null;
+let mode = "login";
+let pendingTask = null;
+let ttsOn = true;
+
+const $ = s => document.querySelector(s);
+const h = (t)=>{const d=document.createElement("div");d.textContent=t;return d.innerHTML;};
+
+async function api(path, {method="GET", body=null, auth=true}={}){
+  const headers = {};
+  if(body) headers["Content-Type"]="application/json";
+  if(auth && token) headers["Authorization"]="Bearer "+token;
+  const res = await fetch(API+path,{method,headers,body:body?JSON.stringify(body):null});
+  if(res.status===401){ logout(); throw new Error("Session expired"); }
+  const txt = await res.text();
+  const data = txt ? JSON.parse(txt) : null;
+  if(!res.ok) throw new Error(data?.detail ? JSON.stringify(data.detail) : res.statusText);
+  return data;
+}
+
+/* ── Auth ── */
+$("#authToggle").onclick = ()=>{
+  mode = mode==="login" ? "register" : "login";
+  $("#dnameRow").classList.toggle("hidden", mode==="login");
+  $("#authBtn").textContent = mode==="login" ? "Sign in" : "Create account";
+  $("#authToggle").textContent = mode==="login" ? "New here? Create an account" : "Have an account? Sign in";
+  $("#authErr").textContent="";
+};
+$("#authBtn").onclick = async ()=>{
+  $("#authErr").textContent="";
+  try{
+    const email=$("#email").value.trim(), password=$("#password").value;
+    let res;
+    if(mode==="register"){
+      res = await api("/auth/register",{method:"POST",auth:false,body:{email,password,display_name:$("#dnameRow").value.trim()||"there"}});
+    }else{
+      res = await api("/auth/login",{method:"POST",auth:false,body:{email,password}});
+    }
+    token = res.access_token; localStorage.setItem("jarvis_token",token);
+    enterApp();
+  }catch(e){ $("#authErr").textContent = e.message; }
+};
+
+function logout(){ token=null; localStorage.removeItem("jarvis_token"); $("#app").classList.add("hidden"); $("#auth").classList.remove("hidden"); }
+$("#logoutBtn").onclick = logout;
+
+/* ── App ── */
+async function enterApp(){
+  $("#auth").classList.add("hidden"); $("#app").classList.remove("hidden");
+  $("#chatlog").innerHTML="";
+  await loadToday();
+}
+
+async function loadToday(){
+  try{
+    const t = await api("/today");
+    $("#greeting").textContent = t.greeting;
+    const bits=[];
+    if(t.open_count) bits.push(`${t.open_count} open task${t.open_count>1?"s":""}`);
+    if(t.overdue.length) bits.push(`${t.overdue.length} overdue`);
+    $("#briefSub").textContent = bits.length? bits.join(" · ") : "You're all clear. Nice.";
+    renderPriorities(t.priorities);
+    if(!$("#chatlog").children.length){
+      let intro = t.greeting + (t.priorities.length ? " Your top priority is “"+t.priorities[0].title+"”. Want to start there?" : " What would you like to get done today?");
+      addMsg("ai", intro, []);
+    }
+  }catch(e){ console.error(e); }
+}
+
+function renderPriorities(list){
+  const box=$("#priorities");
+  if(!list.length){ box.innerHTML='<div class="muted" style="font-size:13px">Nothing yet.</div>'; return; }
+  box.innerHTML="";
+  list.forEach(t=>{
+    const el=document.createElement("div"); el.className="task";
+    el.innerHTML=`<div class="t-title">${h(t.title)}</div>
+      <div class="t-meta"><span class="dot p${t.priority}"></span>P${t.priority}
+      ${t.reason?`· <span title="why">🎯 ${h(t.reason)}</span>`:""}
+      ${t.deadline?`· 📅 ${t.deadline.slice(0,10)}`:""}</div>
+      <div class="t-actions"><button class="btn-sm btn-done" data-id="${t.id}">✓ Done</button></div>`;
+    el.querySelector("button").onclick = async (ev)=>{ await api(`/tasks/${ev.target.dataset.id}/complete`,{method:"POST"}); loadToday(); };
+    box.appendChild(el);
+  });
+}
+
+/* ── Tasks ── */
+$("#addTaskBtn").onclick = ()=>createTask(false);
+async function createTask(skip){
+  const title=$("#ntTitle").value.trim(); if(!title) return;
+  const body={title, reason:$("#ntReason").value.trim()||null, priority:parseInt($("#ntPriority").value), skip_duplicate_check:skip};
+  const d=$("#ntDeadline").value; if(d) body.deadline=new Date(d).toISOString();
+  const res = await api("/tasks",{method:"POST",body});
+  if(res.task===null && res.possible_duplicates.length){ showDup(res.possible_duplicates, body); return; }
+  $("#ntTitle").value=""; $("#ntReason").value=""; $("#ntDeadline").value="";
+  addMsg("ai", `Added “${title}”. I'll keep you accountable.`, []);
+  loadToday();
+}
+function showDup(dupes, body){
+  pendingTask = body;
+  $("#dupList").innerHTML = dupes.map(d=>`<div class="dupitem"><b>${h(d.title)}</b> <span class="pill">${Math.round(d.similarity*100)}% match</span> <span class="muted">· ${d.status}</span></div>`).join("");
+  $("#dupOverlay").classList.remove("hidden");
+}
+$("#dupCancel").onclick = ()=>{ $("#dupOverlay").classList.add("hidden"); pendingTask=null; };
+$("#dupNew").onclick = async ()=>{ $("#dupOverlay").classList.add("hidden"); if(pendingTask){ pendingTask.skip_duplicate_check=true; const b=pendingTask; pendingTask=null; const res=await api("/tasks",{method:"POST",body:b}); addMsg("ai",`Created “${b.title}” as a new task.`,[]); $("#ntTitle").value="";$("#ntReason").value=""; loadToday(); } };
+
+/* ── Chat ── */
+function addMsg(role, text, cites){
+  const el=document.createElement("div"); el.className="msg "+role;
+  el.innerHTML=h(text);
+  if(role==="ai" && cites && cites.length){
+    const c=document.createElement("div"); c.className="cites";
+    c.innerHTML="grounded in your memory:"+cites.map(x=>`<div class="cite">• (${x.kind}) ${h(x.content)} <span class="pill">${Math.round(x.similarity*100)}%</span></div>`).join("");
+    el.appendChild(c);
+  }
+  $("#chatlog").appendChild(el); $("#chatlog").scrollTop=1e9;
+  if(role==="ai" && ttsOn) speak(text);
+}
+async function send(){
+  const msg=$("#chatInput").value.trim(); if(!msg) return;
+  $("#chatInput").value=""; addMsg("user",msg,[]);
+  const typing=document.createElement("div"); typing.className="msg ai"; typing.textContent="…"; $("#chatlog").appendChild(typing); $("#chatlog").scrollTop=1e9;
+  try{
+    const res=await api("/chat",{method:"POST",body:{message:msg}});
+    typing.remove(); addMsg("ai",res.reply,res.citations);
+  }catch(e){ typing.remove(); addMsg("ai","(error: "+e.message+")",[]); }
+}
+$("#sendBtn").onclick=send;
+$("#chatInput").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();} });
+
+/* ── Memory search ── */
+let memTimer;
+$("#memQuery").addEventListener("input",e=>{
+  clearTimeout(memTimer); const q=e.target.value.trim();
+  if(!q){ $("#memResults").innerHTML=""; return; }
+  memTimer=setTimeout(async ()=>{
+    try{ const r=await api("/memory/search",{method:"POST",body:{query:q,limit:5}});
+      $("#memResults").innerHTML = r.length? r.map(m=>`<div class="dupitem">${h(m.content)} <span class="pill">${Math.round(m.similarity*100)}%</span></div>`).join("") : '<div class="muted" style="font-size:13px">No memories yet.</div>';
+    }catch(e){}
+  },300);
+});
+
+/* ── Voice (Web Speech API) ── */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec=null;
+if(SR){
+  rec=new SR(); rec.lang="en-US"; rec.interimResults=false;
+  rec.onresult=e=>{ $("#chatInput").value=e.results[0][0].transcript; send(); };
+  rec.onend=()=>$("#micBtn").classList.remove("rec");
+  $("#micBtn").onclick=()=>{ try{ rec.start(); $("#micBtn").classList.add("rec"); }catch(_){}} ;
+}else{ $("#micBtn").title="Voice input not supported in this browser"; $("#micBtn").style.opacity=.4; }
+
+function speak(t){ if(!window.speechSynthesis) return; const u=new SpeechSynthesisUtterance(t.replace(/\[.*?\]/g,"")); u.rate=1.05; speechSynthesis.cancel(); speechSynthesis.speak(u); }
+$("#ttsTab").onclick=()=>{ ttsOn=!ttsOn; $("#ttsTab").textContent=`🔊 Voice replies: ${ttsOn?"on":"off"}`; $("#ttsTab").classList.toggle("active",ttsOn); if(!ttsOn) speechSynthesis.cancel(); };
+
+/* ── boot ── */
+if(token){ enterApp().catch(logout); }
+</script>
+</body>
+</html>

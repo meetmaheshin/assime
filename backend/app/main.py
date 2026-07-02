@@ -1,11 +1,16 @@
 """FastAPI application factory for JARVIS."""
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import auth, chat, projects, tasks
+from app.api.routes import auth, chat, planning, projects, tasks
 from app.core.config import settings
+
+WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 
 @asynccontextmanager
@@ -39,6 +44,16 @@ def create_app() -> FastAPI:
     app.include_router(projects.router)
     app.include_router(tasks.router)
     app.include_router(chat.router)
+    app.include_router(planning.router)
+
+    # Serve the web demo client from the same origin (no CORS needed).
+    if WEB_DIR.is_dir():
+        @app.get("/", include_in_schema=False)
+        async def root() -> RedirectResponse:
+            return RedirectResponse(url="/ui/")
+
+        app.mount("/ui", StaticFiles(directory=str(WEB_DIR), html=True), name="ui")
+
     return app
 
 

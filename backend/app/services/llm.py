@@ -1,21 +1,25 @@
-"""LLM access behind a single interface.
+"""LLM + embedding access behind one interface.
 
-The rest of the app never imports the OpenAI SDK directly — it depends on
-`LLMClient`. That keeps model choice (and the provider itself) swappable from
-config, and lets tests inject a fake.
-
-Two-tier strategy (see .env.example):
-  - cheap model     -> intent parsing, classification, tagging
-  - reasoning model -> planning, coaching, chat, reviews
-  - embed model     -> semantic memory
+The rest of the app depends on the `LLMClient` interface, never on a concrete
+SDK. Chat and embeddings are resolved independently from config, so we can mix
+providers — e.g. Azure OpenAI for chat + a local sentence-transformers model
+for embeddings (real semantic search, zero API cost).
 """
 from __future__ import annotations
 
+import asyncio
+import hashlib
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Coroutine
+from typing import Any
 
-from openai import AsyncOpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 
 from app.core.config import settings
+
+# ─── Interface ────────────────────────────────────────────────
+EmbedFn = Callable[[str], Coroutine[Any, Any, list[float]]]
+CompleteFn = Callable[..., Coroutine[Any, Any, str]]
 
 
 class LLMClient(ABC):
@@ -23,29 +27,74 @@ class LLMClient(ABC):
     async def embed(self, text: str) -> list[float]: ...
 
     @abstractmethod
-    async def complete(
-        self, system: str, user: str, *, reasoning: bool = True
-    ) -> str: ...
+    async def complete(self, system: str, user: str, *, reasoning: bool = True) -> str: ...
 
 
-class OpenAIClient(LLMClient):
-    def __init__(self) -> None:
-        self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+class CompositeLLM(LLMClient):
+    """Delegates embed() and complete() to independently-chosen backends."""
+
+    def __init__(self, embed_fn: EmbedFn, complete_fn: CompleteFn) -> None:
+        self._embed_fn = embed_fn
+        self._complete_fn = complete_fn
 
     async def embed(self, text: str) -> list[float]:
-        resp = await self._client.embeddings.create(
-            model=settings.openai_model_embed,
-            input=text,
-        )
-        return resp.data[0].embedding
+        return await self._embed_fn(text)
 
     async def complete(self, system: str, user: str, *, reasoning: bool = True) -> str:
-        model = (
-            settings.openai_model_reasoning
-            if reasoning
-            else settings.openai_model_cheap
-        )
-        resp = await self._client.chat.completions.create(
+        return await self._complete_fn(system, user, reasoning=reasoning)
+
+
+# ─── Embedding backends ───────────────────────────────────────
+def _hash_embed_sync(text: str) -> list[float]:
+    """Deterministic local pseudo-embedding — structurally valid, NOT semantic.
+    Fallback so the app runs before a real embedder is configured."""
+    vec = [0.0] * settings.embed_dim
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    for i, byte in enumerate(digest):
+        vec[i % settings.embed_dim] += (byte - 128) / 128.0
+    return vec
+
+
+async def _hash_embed(text: str) -> list[float]:
+    return _hash_embed_sync(text)
+
+
+# Lazily-loaded local model (sentence-transformers). Loaded once, then reused.
+_local_model = None
+
+
+def _get_local_model():
+    global _local_model
+    if _local_model is None:
+        from sentence_transformers import SentenceTransformer
+
+        _local_model = SentenceTransformer(settings.local_embed_model)
+    return _local_model
+
+
+async def _local_embed(text: str) -> list[float]:
+    # sentence-transformers is synchronous + CPU-bound; run off the event loop.
+    def _run() -> list[float]:
+        model = _get_local_model()
+        vec = model.encode(text, normalize_embeddings=True)
+        return vec.tolist()
+
+    return await asyncio.to_thread(_run)
+
+
+def _openai_embedder(client: AsyncOpenAI, model: str) -> EmbedFn:
+    async def _embed(text: str) -> list[float]:
+        resp = await client.embeddings.create(model=model, input=text)
+        return resp.data[0].embedding
+
+    return _embed
+
+
+# ─── Chat backends ────────────────────────────────────────────
+def _openai_completer(client: AsyncOpenAI, reasoning_model: str, cheap_model: str) -> CompleteFn:
+    async def _complete(system: str, user: str, *, reasoning: bool = True) -> str:
+        model = reasoning_model if reasoning else cheap_model
+        resp = await client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": system},
@@ -55,34 +104,51 @@ class OpenAIClient(LLMClient):
         )
         return (resp.choices[0].message.content or "").strip()
 
+    return _complete
 
-class EchoClient(LLMClient):
-    """Offline fallback used when no OPENAI_API_KEY is set. Lets the API boot and
-    the non-AI paths (auth, CRUD, reminders) work without a key. AI answers are
-    clearly stubbed so nobody mistakes them for real output.
-    """
 
-    async def embed(self, text: str) -> list[float]:
-        # Deterministic pseudo-embedding so semantic tables still function in dev.
-        import hashlib
+async def _stub_complete(system: str, user: str, *, reasoning: bool = True) -> str:
+    return f"[stub reply — no chat provider configured] You said: {user[:200]}"
 
-        vec = [0.0] * settings.embed_dim
-        digest = hashlib.sha256(text.encode("utf-8")).digest()
-        for i, byte in enumerate(digest):
-            vec[i % settings.embed_dim] += (byte - 128) / 128.0
-        return vec
 
-    async def complete(self, system: str, user: str, *, reasoning: bool = True) -> str:
-        return (
-            "[stub reply — set OPENAI_API_KEY to enable real AI] "
-            f"You said: {user[:200]}"
+# ─── Wiring ───────────────────────────────────────────────────
+def _resolve_embed_fn() -> EmbedFn:
+    provider = settings.resolved_embedding_provider
+    if provider == "local":
+        return _local_embed
+    if provider == "openai":
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        return _openai_embedder(client, settings.openai_model_embed)
+    if provider == "azure" and settings.azure_deployment_embed:
+        client = AsyncAzureOpenAI(
+            api_key=settings.azure_openai_api_key,
+            azure_endpoint=settings.azure_openai_endpoint,
+            api_version=settings.azure_openai_api_version,
         )
+        return _openai_embedder(client, settings.azure_deployment_embed)
+    return _hash_embed
+
+
+def _resolve_complete_fn() -> CompleteFn:
+    provider = settings.resolved_provider
+    if provider == "azure":
+        client = AsyncAzureOpenAI(
+            api_key=settings.azure_openai_api_key,
+            azure_endpoint=settings.azure_openai_endpoint,
+            api_version=settings.azure_openai_api_version,
+        )
+        cheap = settings.azure_deployment_cheap or settings.azure_deployment_reasoning
+        return _openai_completer(client, settings.azure_deployment_reasoning, cheap)
+    if provider == "openai":
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        return _openai_completer(
+            client, settings.openai_model_reasoning, settings.openai_model_cheap
+        )
+    return _stub_complete
 
 
 def build_llm_client() -> LLMClient:
-    if settings.openai_api_key and settings.openai_api_key.startswith("sk-"):
-        return OpenAIClient()
-    return EchoClient()
+    return CompositeLLM(_resolve_embed_fn(), _resolve_complete_fn())
 
 
 # Module-level singleton, imported where needed.
