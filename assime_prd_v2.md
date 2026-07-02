@@ -1,4 +1,6 @@
-# Project: JARVIS — AI Personal Assistant
+# Project: A.A.T.H — AI Personal Assistant
+
+> **A.A.T.H** = *Artificial Assistant To Human*
 
 **Version:** 2.0 (engineering-ready)
 **Supersedes:** `assime_prd.txt` (v1.0 — vision doc)
@@ -22,7 +24,7 @@ assistant, not a chatbot or to-do app. It should:
 - Keep the user accountable and ask follow-up questions.
 - Learn from previous conversations and reference past work.
 - Prevent duplicate work; understand **projects**, not isolated tasks.
-- Be proactive, not reactive. Feel like Jarvis.
+- Be proactive, not reactive. Feel like A.A.T.H.
 - Get smarter every day because its memory grows.
 
 **North-star:** *"I never forget anything anymore, and someone is keeping me accountable."*
@@ -32,7 +34,7 @@ assistant, not a chatbot or to-do app. It should:
 ## 2. Core Philosophy (unchanged)
 
 Traditional to-do: create → remind → complete → forgotten.
-JARVIS: create → understand **why** → remember forever → follow up → learn →
+A.A.T.H: create → understand **why** → remember forever → follow up → learn →
 reference past work → become a long-term assistant.
 
 ---
@@ -162,7 +164,7 @@ duplicate.
 - **MVP:** on-device `SpeechRecognizer` (STT) + `TextToSpeech` (TTS). Free, works
   offline-ish, no extra cost. Push-to-talk button (no wake word in v1).
 - **Phase 3+:** optional cloud STT (e.g., Whisper) for higher accuracy; optional
-  wake word ("Hey Jarvis") via a lightweight on-device keyword spotter.
+  wake word ("Hey A.A.T.H") via a lightweight on-device keyword spotter.
 - **Fallback:** every voice action has a typed/tap equivalent. Voice is a layer,
   never the only path.
 - **Voice commands v1:** add task, mark complete, move to tomorrow, cancel

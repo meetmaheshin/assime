@@ -3,7 +3,7 @@
 Idempotent: safe to run repeatedly. Run from backend/:
     .venv\\Scripts\\python.exe seed.py
 
-Login afterwards with:  demo@jarvis.app  /  demo12345
+Login afterwards with:  demo@aath.app  /  demo12345
 """
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -18,7 +18,7 @@ from app.models.user import User
 from app.services import memory_service
 from app.services.llm import llm
 
-DEMO_EMAIL = "demo@jarvis.app"
+DEMO_EMAIL = "demo@aath.app"
 DEMO_PASSWORD = "demo12345"
 
 

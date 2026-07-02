@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>JARVIS</title>
+<title>A.A.T.H</title>
 <style>
   :root{
     --bg:#0d1117; --surface:#161b22; --surface2:#1c2330; --line:#2a3441;
@@ -77,8 +77,8 @@
 <!-- AUTH -->
 <div id="auth">
   <div class="card">
-    <div class="logo">JARVIS</div>
-    <div class="muted" style="margin-top:6px;font-size:13px">Your AI executive assistant</div>
+    <div class="logo">A.A.T.H</div>
+    <div class="muted" style="margin-top:6px;font-size:13px">Artificial Assistant To Human</div>
     <div class="stack">
       <input id="dnameRow" class="hidden" placeholder="Your name" />
       <input id="email" placeholder="Email" type="email" />
@@ -95,7 +95,7 @@
 <div id="app" class="hidden">
   <aside>
     <div class="brandbar">
-      <span class="logo" style="font-size:20px">JARVIS</span>
+      <span class="logo" style="font-size:20px">A.A.T.H</span>
       <button class="btn-sm" id="logoutBtn">Sign out</button>
     </div>
 
@@ -137,7 +137,7 @@
   <main>
     <div class="brandbar">
       <div>
-        <div style="font-weight:700">Chat with JARVIS</div>
+        <div style="font-weight:700">Chat with A.A.T.H</div>
         <div class="muted" id="providerNote" style="font-size:12px"></div>
       </div>
       <div class="tabs">
@@ -149,7 +149,7 @@
 
     <div class="composer">
       <button class="icon-btn" id="micBtn" title="Speak">🎙️</button>
-      <textarea id="chatInput" placeholder="Ask JARVIS, or say what you need to do…"></textarea>
+      <textarea id="chatInput" placeholder="Ask A.A.T.H, or say what you need to do…"></textarea>
       <button class="icon-btn send" id="sendBtn" title="Send">➤</button>
     </div>
   </main>
@@ -170,7 +170,7 @@
 
 <script>
 const API = ""; // same origin
-let token = localStorage.getItem("jarvis_token") || null;
+let token = localStorage.getItem("aath_token") || null;
 let mode = "login";
 let pendingTask = null;
 let ttsOn = true;
@@ -239,16 +239,16 @@ async function doAuth(email, password){
       ? {email,password,display_name:$("#dnameRow").value.trim()}
       : {email,password};
     const res = await api(path,{method:"POST",auth:false,body});
-    token = res.access_token; localStorage.setItem("jarvis_token",token);
+    token = res.access_token; localStorage.setItem("aath_token",token);
     enterApp();
   }catch(e){ $("#authErr").textContent = e.message; }
   finally{ btn.disabled=false; btn.textContent=label; }
 }
 $("#authBtn").onclick = ()=>doAuth($("#email").value.trim(), $("#password").value);
 $("#password").addEventListener("keydown",e=>{ if(e.key==="Enter") $("#authBtn").click(); });
-$("#demoBtn").onclick = ()=>{ mode="login"; $("#email").value="demo@jarvis.app"; $("#password").value="demo12345"; doAuth("demo@jarvis.app","demo12345"); };
+$("#demoBtn").onclick = ()=>{ mode="login"; $("#email").value="demo@aath.app"; $("#password").value="demo12345"; doAuth("demo@aath.app","demo12345"); };
 
-function logout(){ token=null; localStorage.removeItem("jarvis_token"); $("#app").classList.add("hidden"); $("#auth").classList.remove("hidden"); }
+function logout(){ token=null; localStorage.removeItem("aath_token"); $("#app").classList.add("hidden"); $("#auth").classList.remove("hidden"); }
 $("#logoutBtn").onclick = logout;
 
 /* ── App ── */

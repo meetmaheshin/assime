@@ -1,4 +1,4 @@
-"""FastAPI application factory for JARVIS."""
+"""FastAPI application factory for A.A.T.H (Artificial Assistant To Human)."""
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="JARVIS API",
+        title="A.A.T.H API",
         version="0.1.0",
         description="AI Personal Assistant backend — tasks, projects, memory, chat.",
         lifespan=lifespan,

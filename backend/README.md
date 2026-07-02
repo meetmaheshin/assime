@@ -1,7 +1,7 @@
-# JARVIS Backend
+# A.A.T.H Backend
 
-FastAPI + PostgreSQL (pgvector) + Redis backend for the JARVIS AI Personal
-Assistant. Implements the MVP v1 core: multi-user auth, tasks/projects,
+FastAPI + PostgreSQL (pgvector) + Redis backend for **A.A.T.H** (Artificial
+Assistant To Human), an AI Personal Assistant. Implements the MVP v1 core: multi-user auth, tasks/projects,
 semantic memory, duplicate detection, and a retrieve-then-generate chat endpoint.
 
 See [`../assime_prd_v2.md`](../assime_prd_v2.md) for the full product spec.

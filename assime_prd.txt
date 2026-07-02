@@ -1,4 +1,4 @@
-# Project: JARVIS - AI Personal Assistant
+# Project: A.A.T.H - AI Personal Assistant
 
 Version: 1.0
 
@@ -17,7 +17,7 @@ The assistant should:
 - Prevent duplicate work.
 - Understand projects instead of isolated tasks.
 - Be proactive instead of reactive.
-- Feel like talking to Jarvis.
+- Feel like talking to A.A.T.H.
 
 The assistant should become smarter every day by remembering history.
 

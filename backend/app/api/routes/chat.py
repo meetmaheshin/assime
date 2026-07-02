@@ -25,7 +25,8 @@ from app.services.llm import llm
 router = APIRouter(tags=["chat"])
 
 _SYSTEM = (
-    "You are JARVIS, a professional, friendly executive assistant. Be concise, "
+    "You are A.A.T.H (Artificial Assistant To Human), a professional, friendly "
+    "executive assistant. Be concise, "
     "motivating, no fluff. Answer ONLY from the context below. If the context "
     "does not contain the answer, say you don't have it yet and ask a short "
     "follow-up question. Never invent facts. Never assume a task is done."
