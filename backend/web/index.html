@@ -463,10 +463,22 @@ function showTab(name){
 document.querySelectorAll(".nav").forEach(n=>n.onclick=()=>showTab(n.dataset.tab));
 
 /* App */
+async function syncTimezone(){
+  // Auto-set the account timezone from the device (once) so greetings and the
+  // agent's clock match the user's real local time instead of UTC.
+  try{
+    const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if(!tz || tz==="UTC") return;
+    const me=await api("/auth/me");
+    if(me.timezone==="UTC") await api("/auth/me/settings",{method:"PATCH",body:{timezone:tz}});
+  }catch(_){}
+}
 async function enterApp(){
   $("#auth").classList.add("hidden"); $("#app").classList.remove("hidden");
-  $("#chatlog").innerHTML=""; await loadToday();  // populates Today + posts the greeting
-  showTab("chat");  // chat is the home screen — it's a conversation first
+  $("#chatlog").innerHTML="";
+  await syncTimezone();            // fix the clock before greeting
+  await loadToday();               // populates Today + posts the greeting
+  showTab("chat");                 // chat is the home screen — a conversation first
   loadNotifications();
   if(notifTimer) clearInterval(notifTimer);
   notifTimer=setInterval(loadNotifications, 30000);  // proactive polling

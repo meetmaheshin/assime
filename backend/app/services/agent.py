@@ -143,7 +143,9 @@ async def run(
         "they already told you earlier in this conversation; don't re-ask for "
         f"details you already have. Current local time: {now.isoformat()}. Resolve "
         "relative times ('4am', 'tomorrow') against it. Keep replies to 1-3 short "
-        "sentences. Never invent facts.\n\n"
+        "sentences. Address the user by name sparingly — an occasional greeting is "
+        "fine, but do NOT repeat their name in every message; in normal back-and-"
+        "forth, don't use it at all. Never invent facts.\n\n"
         f"Relevant memory:\n{context}"
     )
 
