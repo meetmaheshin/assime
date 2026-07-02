@@ -75,6 +75,17 @@ class Settings(BaseSettings):
             return "openai"
         return "stub"
 
+    # --- Cartesia (voice TTS + STT) ---
+    cartesia_api_key: str = ""
+    cartesia_version: str = "2024-11-13"
+    cartesia_tts_model: str = "sonic-2"
+    cartesia_stt_model: str = "ink-whisper"
+    cartesia_voice_id: str = "a0e99841-438c-4a64-b679-ae501e7d6091"
+
+    @property
+    def voice_enabled(self) -> bool:
+        return bool(self.cartesia_api_key)
+
     # Cost guardrail
     daily_token_budget: int = 200_000
 

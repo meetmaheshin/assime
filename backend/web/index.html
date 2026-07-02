@@ -74,15 +74,17 @@
   .p1{background:var(--danger)}.p2{background:var(--warn)}.p3{background:var(--accent)}.p4,.p5{background:var(--muted)}
   .banner{background:linear-gradient(90deg,rgba(240,136,62,.15),transparent);border:1px solid rgba(240,136,62,.4);border-radius:12px;padding:10px 12px;font-size:13px;margin-bottom:14px}
 
-  /* Voice capture card */
-  .capture{background:var(--surface2);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:18px;display:flex;gap:14px;align-items:center}
-  .mic-fab{width:58px;height:58px;flex:0 0 58px;border-radius:50%;font-size:24px;display:flex;align-items:center;justify-content:center;
-    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;box-shadow:0 8px 20px rgba(76,141,255,.35)}
-  .mic-fab:active{transform:scale(.95)}
-  .mic-fab.rec{background:var(--danger);box-shadow:0 0 0 0 rgba(248,81,73,.6);animation:ripple 1.3s infinite}
-  @keyframes ripple{0%{box-shadow:0 0 0 0 rgba(248,81,73,.55)}70%{box-shadow:0 0 0 16px rgba(248,81,73,0)}100%{box-shadow:0 0 0 0 rgba(248,81,73,0)}}
-  .cap-title{font-weight:600;font-size:15px}
-  .cap-status{font-size:13px;margin-top:2px}
+  /* Voice FAB — thumb-reachable, sits above the bottom nav */
+  .fabmic{position:absolute;right:16px;bottom:80px;z-index:25;width:62px;height:62px;border-radius:50%;
+    font-size:26px;display:none;align-items:center;justify-content:center;color:#fff;border:none;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 10px 26px rgba(76,141,255,.5)}
+  .fabmic.show{display:flex}
+  .fabmic:active{transform:scale(.94)}
+  .fabmic.rec{background:var(--danger);animation:ripple 1.3s infinite}
+  @keyframes ripple{0%{box-shadow:0 0 0 0 rgba(248,81,73,.5)}70%{box-shadow:0 0 0 18px rgba(248,81,73,0)}100%{box-shadow:0 0 0 0 rgba(248,81,73,0)}}
+  .capbubble{position:absolute;right:16px;bottom:152px;z-index:25;max-width:74%;
+    background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;
+    font-size:14px;line-height:1.4;box-shadow:0 12px 30px rgba(0,0,0,.55)}
 
   /* Chat */
   #screen-chat{padding:0}
@@ -104,7 +106,11 @@
   .bottomnav{display:flex;background:var(--surface);border-top:1px solid var(--line);
     padding-bottom:env(safe-area-inset-bottom)}
   .nav{flex:1;background:none;border:none;padding:10px 0 12px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);font-size:11px}
-  .nav .ico{font-size:21px;line-height:1}
+  .nav .ico{line-height:1}
+  .nav svg{width:23px;height:23px}
+  .cbtn svg{width:21px;height:21px}
+  .fabmic svg{width:27px;height:27px}
+  .iconbtn svg{width:19px;height:19px}
   .nav.active{color:var(--accent)}
   .fab{position:relative}
 
@@ -140,7 +146,9 @@
         <div class="logo">AARTH</div>
         <div class="sub" id="appSub">Artificial Assistant &amp; Reconciliation To Human</div>
       </div>
-      <button class="iconbtn" id="logoutBtn" title="Sign out">⏻</button>
+      <button class="iconbtn" id="logoutBtn" title="Sign out" aria-label="Sign out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>
+      </button>
     </div>
 
     <div class="screens">
@@ -149,14 +157,6 @@
         <div class="pad">
           <div class="greeting" id="greeting">Good day.</div>
           <div class="muted" id="briefSub" style="font-size:14px;margin-bottom:16px">Loading…</div>
-
-          <div class="capture">
-            <button class="mic-fab" id="homeMic" title="Tap and talk to add a task">🎙️</button>
-            <div>
-              <div class="cap-title" id="capTitle">Tap &amp; talk to add a task</div>
-              <div class="cap-status" id="capStatus">Say it naturally — I'll ask back if I need the “why”.</div>
-            </div>
-          </div>
 
           <div id="overdueBanner"></div>
           <div class="h">Today's priorities</div>
@@ -168,9 +168,13 @@
       <section class="screen" id="screen-chat">
         <div class="chatlog" id="chatlog"></div>
         <div class="composer">
-          <button class="cbtn" id="micBtn" title="Speak">🎙️</button>
+          <button class="cbtn" id="micBtn" title="Speak" aria-label="Speak">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+          </button>
           <textarea id="chatInput" placeholder="Ask AARTH…"></textarea>
-          <button class="cbtn send" id="sendBtn" title="Send">➤</button>
+          <button class="cbtn send" id="sendBtn" title="Send" aria-label="Send">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+          </button>
         </div>
       </section>
 
@@ -205,11 +209,17 @@
       </section>
     </div>
 
+    <!-- Voice FAB + status bubble: thumb-reachable, above the nav -->
+    <div id="capBubble" class="capbubble hidden"></div>
+    <button id="homeMic" class="fabmic" title="Tap and talk to add a task" aria-label="Voice add task">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+    </button>
+
     <nav class="bottomnav">
-      <button class="nav active" data-tab="today"><span class="ico">🏠</span>Today</button>
-      <button class="nav" data-tab="chat"><span class="ico">💬</span>Chat</button>
-      <button class="nav" data-tab="add"><span class="ico">➕</span>Add</button>
-      <button class="nav" data-tab="memory"><span class="ico">🧠</span>Memory</button>
+      <button class="nav active" data-tab="today"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></span>Today</button>
+      <button class="nav" data-tab="chat"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span>Chat</button>
+      <button class="nav" data-tab="add"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg></span>Add</button>
+      <button class="nav" data-tab="memory"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3z"/></svg></span>Memory</button>
     </nav>
 
     <!-- DUP MODAL -->
@@ -297,6 +307,9 @@ $("#logoutBtn").onclick=logout;
 function showTab(name){
   document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("active",s.id==="screen-"+name));
   document.querySelectorAll(".nav").forEach(n=>n.classList.toggle("active",n.dataset.tab===name));
+  // Voice FAB lives on Home (thumb-reachable). Hide elsewhere.
+  $("#homeMic").classList.toggle("show", name==="today");
+  if(name!=="today") setCap("");
   if(name==="memory") $("#memQuery").focus();
 }
 document.querySelectorAll(".nav").forEach(n=>n.onclick=()=>showTab(n.dataset.tab));
@@ -357,7 +370,7 @@ function showDup(dupes,ctx){
   $("#dupList").innerHTML=dupes.map(d=>`<div class="dupitem"><b>${h(d.title)}</b> <span class="pill">${Math.round(d.similarity*100)}% match</span> <span class="muted">· ${d.status}</span></div>`).join("");
   $("#dupOverlay").classList.remove("hidden");
 }
-$("#dupCancel").onclick=()=>{$("#dupOverlay").classList.add("hidden");dupCtx=null;captureDraft=null;setCap("Tap & talk to add a task","Cancelled.");};
+$("#dupCancel").onclick=()=>{$("#dupOverlay").classList.add("hidden");dupCtx=null;captureDraft=null;setCap("Cancelled.");};
 $("#dupNew").onclick=async()=>{
   $("#dupOverlay").classList.add("hidden");
   const ctx=dupCtx; dupCtx=null; if(!ctx) return;
@@ -405,65 +418,96 @@ $("#memQuery").addEventListener("input",e=>{
   },300);
 });
 
-/* Voice */
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition; let rec=null;
-if(SR){rec=new SR();rec.lang="en-US";rec.interimResults=false;
-  rec.onresult=e=>{$("#chatInput").value=e.results[0][0].transcript;send();};
-  rec.onend=()=>$("#micBtn").classList.remove("rec");
-  $("#micBtn").onclick=()=>{try{rec.start();$("#micBtn").classList.add("rec");}catch(_){}}
-}else{$("#micBtn").style.opacity=.4;$("#micBtn").title="Voice not supported here";}
-function speak(t){if(!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(t.replace(/\[.*?\]/g,""));u.rate=1.05;speechSynthesis.cancel();speechSynthesis.speak(u);}
-
-/* ── Voice task capture (Home) ── */
-let captureDraft=null, capListening=false, capText="", capRec=null;
-function setCap(title,status){$("#capTitle").textContent=title; if(status!==undefined)$("#capStatus").textContent=status;}
-if(SR){
-  capRec=new SR(); capRec.lang="en-US"; capRec.continuous=true; capRec.interimResults=true;
-  capRec.onresult=e=>{
-    let fin="",interim="";
-    for(let i=e.resultIndex;i<e.results.length;i++){
-      const tr=e.results[i][0].transcript;
-      if(e.results[i].isFinal) fin+=tr+" "; else interim+=tr;
-    }
-    if(fin) capText+=fin;
-    setCap("Listening… tap ✓ when done", (capText+interim).trim()||"…");
-  };
-  capRec.onend=()=>{ if(capListening){ capListening=false; $("#homeMic").classList.remove("rec"); $("#homeMic").textContent="🎙️"; submitCapture(capText.trim()); } };
+/* ── Voice via Cartesia: streaming TTS + MediaRecorder → STT ── */
+let mediaStream=null;
+function recSupported(){ return !!(navigator.mediaDevices && window.MediaRecorder); }
+async function recStart(){
+  mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});
+  const mr=new MediaRecorder(mediaStream); mr._chunks=[];
+  mr.ondataavailable=e=>{ if(e.data&&e.data.size) mr._chunks.push(e.data); };
+  mr.start(); return mr;
 }
-$("#homeMic").onclick=()=>{
-  if(!SR){ setCap("Voice not supported here","Use Chrome or Edge for voice capture."); return; }
-  if(!capListening){
-    capText=""; capListening=true;
-    $("#homeMic").classList.add("rec"); $("#homeMic").textContent="✓";
-    setCap("Listening… tap ✓ when done","Speak your task naturally.");
-    try{ capRec.start(); }catch(_){}
+function recStop(mr){ return new Promise(res=>{
+  mr.onstop=()=>{ const blob=new Blob(mr._chunks,{type:mr.mimeType||"audio/webm"});
+    if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; } res(blob); };
+  mr.stop();
+});}
+async function transcribe(blob){
+  const fd=new FormData(); fd.append("audio", blob, "clip.webm");
+  const res=await fetch("/voice/stt",{method:"POST",headers:token?{"Authorization":"Bearer "+token}:{},body:fd});
+  if(!res.ok) throw new Error("Couldn't transcribe");
+  return ((await res.json()).text||"").trim();
+}
+// Streaming playback: append MP3 chunks to a MediaSource as they arrive (low latency).
+async function speak(text){
+  const clean=(text||"").replace(/\[.*?\]/g,"").trim(); if(!clean||!token) return;
+  try{
+    const res=await fetch("/voice/tts",{method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({text:clean})});
+    if(!res.ok||!res.body) throw new Error("tts");
+    if(window.MediaSource && MediaSource.isTypeSupported("audio/mpeg")){
+      const ms=new MediaSource(); const audio=new Audio(); audio.src=URL.createObjectURL(ms);
+      await new Promise((r,j)=>{ms.addEventListener("sourceopen",r,{once:true});setTimeout(()=>j(new Error("mse")),2500);});
+      const sb=ms.addSourceBuffer("audio/mpeg"); const reader=res.body.getReader();
+      audio.play().catch(()=>{});
+      for(;;){ const {value,done}=await reader.read(); if(done) break;
+        await new Promise(r=>{sb.addEventListener("updateend",r,{once:true});sb.appendBuffer(value);}); }
+      if(ms.readyState==="open"){ try{ms.endOfStream();}catch(_){} }
+    }else{
+      const url=URL.createObjectURL(await res.blob()); const a=new Audio(url); a.onended=()=>URL.revokeObjectURL(url); await a.play().catch(()=>{});
+    }
+    return;
+  }catch(_){}
+  if(window.speechSynthesis){ const u=new SpeechSynthesisUtterance(clean); speechSynthesis.cancel(); speechSynthesis.speak(u); }
+}
+
+/* Chat mic (composer) */
+let chatMR=null;
+$("#micBtn").onclick=async()=>{
+  if(!recSupported()){ alert("Recording needs Chrome or Edge."); return; }
+  if(!chatMR){
+    try{ chatMR=await recStart(); $("#micBtn").classList.add("rec"); }
+    catch(_){ alert("Allow microphone access to use voice."); }
   }else{
-    capListening=false; $("#homeMic").classList.remove("rec"); $("#homeMic").textContent="🎙️";
-    try{ capRec.stop(); }catch(_){}  // onend triggers submitCapture
+    const mr=chatMR; chatMR=null; $("#micBtn").classList.remove("rec");
+    const blob=await recStop(mr);
+    try{ const t=await transcribe(blob); if(t){ $("#chatInput").value=t; send(); } }catch(_){}
+  }
+};
+
+/* Home voice FAB — tap to start, tap again to stop → capture flow */
+let captureDraft=null, capMR=null;
+function setCap(msg){ const b=$("#capBubble"); if(!b) return; if(!msg){ b.classList.add("hidden"); return; } b.innerHTML=msg; b.classList.remove("hidden"); }
+$("#homeMic").onclick=async()=>{
+  if(!recSupported()){ setCap("Voice needs Chrome or Edge."); return; }
+  if(!capMR){
+    try{ capMR=await recStart(); $("#homeMic").classList.add("rec"); setCap("Listening… tap again when you're done."); }
+    catch(_){ setCap("Allow microphone access, then tap again."); }
+  }else{
+    const mr=capMR; capMR=null; $("#homeMic").classList.remove("rec"); setCap("Transcribing…");
+    const blob=await recStop(mr);
+    try{ const t=await transcribe(blob); if(!t){ setCap("Didn't catch that — tap and try again."); return; } setCap("“"+t+"”"); submitCapture(t); }
+    catch(_){ setCap("Couldn't transcribe — try again."); }
   }
 };
 async function submitCapture(text){
-  if(!text){ setCap("Tap & talk to add a task","Didn't catch that — try again."); return; }
-  setCap("Thinking…", "“"+text+"”");
-  try{
-    const res=await api("/tasks/capture",{method:"POST",body:{utterance:text,draft:captureDraft}});
-    handleCapture(res);
-  }catch(e){ setCap("Tap & talk to add a task", e.message); }
+  if(!text){ setCap("Didn't catch that — try again."); return; }
+  try{ const res=await api("/tasks/capture",{method:"POST",body:{utterance:text,draft:captureDraft}}); handleCapture(res); }
+  catch(e){ setCap(e.message); }
 }
 function handleCapture(res){
   captureDraft=res.draft;
   if(res.action==="ask"){
-    setCap("🤖 "+res.question,"Tap 🎙️ and answer.");
+    setCap(res.question+"<br><span class='muted' style='font-size:12px'>Tap the mic to answer.</span>");
     speak(res.question);
-    $("#homeMic").textContent="🎙️";
   }else if(res.action==="duplicate"){
-    setCap("Possible duplicate","Same, new, or follow-up?");
+    setCap("I found similar work — same, new, or a follow-up?");
     showDup(res.possible_duplicates,{type:"capture",draft:res.draft});
   }else if(res.action==="created"){
     captureDraft=null;
-    setCap("✅ Added “"+res.task.title+"”","Tap & talk to add another.");
+    setCap("✓ Added “"+res.task.title+"”");
     speak("Added "+res.task.title);
     loadToday();
+    setTimeout(()=>{ if(!capMR) setCap(""); }, 4500);
   }
 }
 
