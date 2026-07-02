@@ -53,6 +53,29 @@ def create_app() -> FastAPI:
             "api_mode": "v1" if settings.azure_openai_base_url else "classic",
         }
 
+    @app.get("/health/llm", tags=["meta"], include_in_schema=False)
+    async def health_llm() -> dict:
+        """TEMP diagnostic: live minimal chat call, surfaces the real error."""
+        from app.services.llm import build_chat_client
+        info = {
+            "mode": "v1" if settings.azure_openai_base_url else "classic",
+            "model": settings.azure_deployment_reasoning,
+            "base_url": settings.azure_openai_base_url or None,
+            "endpoint": settings.azure_openai_endpoint or None,
+            "api_version": settings.azure_openai_api_version,
+            "provider": settings.resolved_provider,
+        }
+        try:
+            client, model = build_chat_client()
+            resp = await client.chat.completions.create(
+                model=model, messages=[{"role": "user", "content": "hi"}])
+            info["ok"] = True
+            info["reply"] = (resp.choices[0].message.content or "")[:60]
+        except Exception as e:  # noqa: BLE001
+            info["ok"] = False
+            info["error"] = f"{type(e).__name__}: {str(e)[:400]}"
+        return info
+
     app.include_router(auth.router)
     app.include_router(projects.router)
     app.include_router(tasks.router)
