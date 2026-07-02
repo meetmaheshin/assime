@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.conversation import ConversationTurn
 from app.models.user import User
@@ -26,11 +27,33 @@ router = APIRouter(tags=["chat"])
 
 _SYSTEM = (
     "You are A.A.T.H (Artificial Assistant To Human), a professional, friendly "
-    "executive assistant. Be concise, "
-    "motivating, no fluff. Answer ONLY from the context below. If the context "
-    "does not contain the answer, say you don't have it yet and ask a short "
-    "follow-up question. Never invent facts. Never assume a task is done."
+    "executive assistant. Be concise, warm, and human — 1-3 short sentences, no "
+    "bullet dumps, no jargon. Use the context below to ground your answer. If the "
+    "context doesn't cover it, say so briefly and ask one short follow-up. Never "
+    "invent facts. Never assume a task is done. Address the user by name when natural."
 )
+
+# Only surface a memory as a "based on" reference when it's clearly relevant.
+_CITE_MIN_SIMILARITY = 0.35
+
+_GREETINGS = {"hi", "hey", "hello", "yo", "hola", "sup", "good morning",
+              "good evening", "good afternoon"}
+
+
+def _stub_reply(name: str, message: str, hits: list) -> str:
+    """Human-sounding placeholder used until a chat provider (Azure/OpenAI) is
+    configured. No prompt echo, no scores — just a friendly, useful message."""
+    msg = message.strip().lower().rstrip("!?. ")
+    top = hits[0][0].content if hits else None
+    note = " (My conversational AI isn't switched on yet, so this is a simple reply.)"
+    if msg in _GREETINGS:
+        return (f"Hi {name}! How can I help — want to review today's tasks, add "
+                f"something new, or search what you've told me before?" + note)
+    if top:
+        return (f"Here's what's most relevant to that: “{top.split('.')[0]}”. "
+                f"Want me to open it or add something new, {name}?" + note)
+    return (f"I don't have anything on that yet, {name}. Tell me a bit more and "
+            f"I'll remember it." + note)
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -43,13 +66,15 @@ async def chat(
         db, llm, user_id=user.id, query=payload.message, limit=8
     )
 
-    if hits:
-        context = "\n".join(f"- ({mem.kind}) {mem.content}" for mem, _ in hits)
+    if settings.resolved_provider == "stub":
+        reply = _stub_reply(user.display_name, payload.message, hits)
     else:
-        context = "(no relevant memories found)"
-
-    prompt = f"Context (the user's memory):\n{context}\n\nUser: {payload.message}"
-    reply = await llm.complete(_SYSTEM, prompt, reasoning=True)
+        if hits:
+            context = "\n".join(f"- ({mem.kind}) {mem.content}" for mem, _ in hits)
+        else:
+            context = "(no relevant memories found)"
+        prompt = f"Context (the user's memory):\n{context}\n\nUser: {payload.message}"
+        reply = await llm.complete(_SYSTEM, prompt, reasoning=True)
 
     # Persist both turns; recent turns feed short-term context, later summarized.
     db.add_all([
@@ -58,12 +83,15 @@ async def chat(
     ])
     await db.commit()
 
-    citations = [
-        MemoryCitation(
-            id=mem.id, kind=mem.kind, content=mem.content, similarity=round(sim, 3)
-        )
-        for mem, sim in hits
-    ]
+    # Citations only for real answers, and only clearly-relevant memories.
+    citations = []
+    if settings.resolved_provider != "stub":
+        citations = [
+            MemoryCitation(
+                id=mem.id, kind=mem.kind, content=mem.content, similarity=round(sim, 3)
+            )
+            for mem, sim in hits if sim >= _CITE_MIN_SIMILARITY
+        ]
     return ChatResponse(reply=reply, citations=citations)
 
 

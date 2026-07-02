@@ -350,7 +350,7 @@ function addMsg(role,text,cites){
   const el=document.createElement("div"); el.className="msg "+role; el.innerHTML=h(text);
   if(role==="ai"&&cites&&cites.length){
     const c=document.createElement("div"); c.className="cites";
-    c.innerHTML="grounded in your memory:"+cites.map(x=>`<div>• (${x.kind}) ${h(x.content)} <span class="pill">${Math.round(x.similarity*100)}%</span></div>`).join("");
+    c.innerHTML="Based on what you've told me:"+cites.map(x=>`<div>• ${h(x.content)}</div>`).join("");
     el.appendChild(c);
   }
   $("#chatlog").appendChild(el); $("#chatlog").scrollTop=1e9;
