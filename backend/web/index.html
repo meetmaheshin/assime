@@ -240,7 +240,7 @@
       <section class="screen" id="screen-chat">
         <div class="chatlog" id="chatlog"></div>
         <div class="composer">
-          <button class="cbtn" id="micBtn" title="Hold to talk" aria-label="Hold to talk">
+          <button class="cbtn" id="micBtn" title="Tap to talk" aria-label="Tap to talk">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
           </button>
           <textarea id="chatInput" placeholder="Ask AARTH…"></textarea>
@@ -341,7 +341,7 @@
 
     <!-- Voice FAB + status bubble: thumb-reachable, above the nav -->
     <div id="capBubble" class="capbubble hidden"></div>
-    <button id="homeMic" class="fabmic" title="Hold to talk" aria-label="Voice add task">
+    <button id="homeMic" class="fabmic" title="Tap to talk" aria-label="Voice add task">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
     </button>
 
@@ -785,56 +785,38 @@ async function speak(text){
 }
 
 /* Transient toast for voice/errors */
-function toast(msg){ const t=$("#toast"); if(!t)return; t.textContent=msg; t.classList.remove("hidden"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.add("hidden"),2800); }
+function toast(msg){ const t=$("#toast"); if(!t)return; t.textContent=msg; t.classList.remove("hidden"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.add("hidden"),3200); }
 
-/* Hold-to-talk: press & hold to record, release to transcribe. Intuitive on
-   both touch and mouse; handles releasing before the mic finishes opening. */
-function bindHoldToTalk(btn, {onStart, onFinish}){
-  let want=false, mr=null;
-  async function begin(e){
-    e.preventDefault();
-    if(want) return; want=true;
-    if(!recSupported()){ want=false; onStart(false,"Voice needs Chrome or Edge"); return; }
-    try{
-      const m=await recStart();
-      if(!want){ try{m.stop();}catch(_){}; if(mediaStream){mediaStream.getTracks().forEach(t=>t.stop());mediaStream=null;} return; }
-      mr=m; btn.classList.add("rec"); onStart(true);
-    }catch(_){ want=false; onStart(false,"Allow microphone access"); }
+/* Chat mic — tap to start, tap again to send (reliable across touch/mouse). */
+let chatRec=null;
+$("#micBtn").onclick=async()=>{
+  if(chatRec){
+    const mr=chatRec; chatRec=null; $("#micBtn").classList.remove("rec"); toast("Transcribing…");
+    let blob; try{ blob=await recStop(mr); }catch(_){ toast("Recording error"); return; }
+    try{ const t=await transcribe(blob); if(t){ $("#chatInput").value=t; send(); } else toast("Didn't catch that — try again"); }
+    catch(e){ toast("Voice failed: "+(e.message||"error")); }
+  }else{
+    if(!recSupported()){ toast("Voice needs Chrome or Edge"); return; }
+    try{ chatRec=await recStart(); $("#micBtn").classList.add("rec"); toast("● Recording… tap mic to send"); }
+    catch(_){ toast("Allow microphone access to use voice"); }
   }
-  async function end(){
-    if(!want) return; want=false;
-    if(!mr) return;
-    const m=mr; mr=null; btn.classList.remove("rec");
-    const blob=await recStop(m);
-    await onFinish(blob);
-  }
-  btn.addEventListener("pointerdown",begin);
-  btn.addEventListener("pointerup",end);
-  btn.addEventListener("pointerleave",end);
-  btn.addEventListener("pointercancel",end);
-  btn.addEventListener("contextmenu",e=>e.preventDefault());
-}
+};
 
-/* Chat mic: hold to talk */
-bindHoldToTalk($("#micBtn"), {
-  onStart:(ok,msg)=>{ if(!ok&&msg) toast(msg); else if(ok) toast("Listening… release to send"); },
-  onFinish: async (blob)=>{
-    try{ const t=await transcribe(blob); if(t){ $("#chatInput").value=t; send(); } else toast("Didn't catch that"); }
-    catch(e){ toast("Voice: "+(e.message||"failed")); }
-  }
-});
-
-/* Home voice FAB: hold to talk → capture flow */
-let captureDraft=null;
+/* Home voice FAB — tap to start, tap again to send → capture flow. */
+let captureDraft=null, capRec=null;
 function setCap(msg){ const b=$("#capBubble"); if(!b) return; if(!msg){ b.classList.add("hidden"); return; } b.innerHTML=msg; b.classList.remove("hidden"); }
-bindHoldToTalk($("#homeMic"), {
-  onStart:(ok,msg)=>{ setCap(ok ? "🎙️ Listening… release when you're done." : (msg||"Mic error")); },
-  onFinish: async (blob)=>{
-    setCap("Transcribing…");
-    try{ const t=await transcribe(blob); if(!t){ setCap("Didn't catch that — hold and try again."); return; } setCap("“"+t+"”"); submitCapture(t); }
-    catch(e){ setCap("Voice: "+(e.message||"failed")); }
+$("#homeMic").onclick=async()=>{
+  if(capRec){
+    const mr=capRec; capRec=null; $("#homeMic").classList.remove("rec"); setCap("Transcribing…");
+    let blob; try{ blob=await recStop(mr); }catch(_){ setCap("Recording error — tap to retry"); return; }
+    try{ const t=await transcribe(blob); if(!t){ setCap("Didn't catch that — tap and try again."); return; } setCap("“"+t+"”"); submitCapture(t); }
+    catch(e){ setCap("Voice failed: "+(e.message||"error")); }
+  }else{
+    if(!recSupported()){ setCap("Voice needs Chrome or Edge."); return; }
+    try{ capRec=await recStart(); $("#homeMic").classList.add("rec"); setCap("● Recording… tap the mic again to finish."); }
+    catch(_){ setCap("Allow microphone access, then tap again."); }
   }
-});
+};
 async function submitCapture(text){
   if(!text){ setCap("Didn't catch that — try again."); return; }
   try{ const res=await api("/tasks/capture",{method:"POST",body:{utterance:text,draft:captureDraft}}); handleCapture(res); }
