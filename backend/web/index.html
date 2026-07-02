@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0d1117" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="AARTH" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="icon" href="icon-192.png" />
 <title>AARTH</title>
 <style>
   :root{
@@ -125,6 +130,9 @@
   .callbtn.snooze::before{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M12 7v5l3 2'/%3E%3Ccircle cx='12' cy='12' r='9' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E");mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='white' stroke-width='2' stroke-linecap='round' d='M12 7v5l3 2'/%3E%3Ccircle cx='12' cy='12' r='9' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E")}
   .meeting{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:center;font-size:14px}
   .meeting .mt{font-weight:700;color:var(--accent);min-width:52px}
+  .slabel{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+  .toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:13px 14px}
+  .toggle input{width:20px;height:20px;accent-color:var(--accent)}
 
   /* Chat */
   #screen-chat{padding:0}
@@ -190,6 +198,9 @@
         <button class="iconbtn" id="bellBtn" title="Notifications" aria-label="Notifications" style="position:relative">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
           <span id="bellBadge" class="badge hidden">0</span>
+        </button>
+        <button class="iconbtn" id="settingsBtn" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
         <button class="iconbtn" id="logoutBtn" title="Sign out" aria-label="Sign out">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>
@@ -263,6 +274,38 @@
           <div id="notifList"><div class="muted">Nothing right now.</div></div>
         </div>
       </section>
+
+      <!-- SETTINGS -->
+      <section class="screen" id="screen-settings">
+        <div class="pad">
+          <div class="greeting" style="font-size:20px">Settings</div>
+          <div class="muted" style="font-size:13px;margin-bottom:16px">How and when AARTH reaches you.</div>
+          <div class="stack" style="margin-top:0;gap:14px">
+            <div><label class="slabel">Your name</label><input id="setName" /></div>
+            <div><label class="slabel">Time zone</label>
+              <select id="setTz">
+                <option>UTC</option><option>Asia/Kolkata</option><option>Asia/Dubai</option>
+                <option>Asia/Singapore</option><option>Europe/London</option><option>Europe/Berlin</option>
+                <option>America/New_York</option><option>America/Los_Angeles</option><option>Australia/Sydney</option>
+              </select></div>
+            <div><label class="slabel">Morning briefing time</label><select id="setMorning"></select></div>
+            <div><label class="slabel">Evening review time</label><select id="setEvening"></select></div>
+            <div style="display:flex;gap:10px">
+              <div style="flex:1"><label class="slabel">Quiet hours from</label><select id="setQFrom"></select></div>
+              <div style="flex:1"><label class="slabel">to</label><select id="setQTo"></select></div>
+            </div>
+            <label class="toggle"><span>Don't ring — silent notifications only</span><input type="checkbox" id="setNoRing" /></label>
+            <label class="toggle"><span>Voice replies (AARTH speaks)</span><input type="checkbox" id="setVoice" checked /></label>
+            <button class="btn-primary" id="saveSettings">Save settings</button>
+            <div id="setStatus" class="muted" style="font-size:13px;min-height:16px"></div>
+            <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
+            <label class="slabel">Add to home screen</label>
+            <div class="muted" style="font-size:13px;margin-top:-6px">Install AARTH like an app — one tap from your home screen.</div>
+            <button class="btn-sm" id="installBtn">Install AARTH</button>
+            <div id="installHint" class="muted" style="font-size:12px"></div>
+          </div>
+        </div>
+      </section>
     </div>
 
     <!-- Voice FAB + status bubble: thumb-reachable, above the nav -->
@@ -312,7 +355,9 @@
 <script>
 const API="";
 let token=localStorage.getItem("aath_token")||null;
-let mode="login", pendingTask=null, ttsOn=true;
+let mode="login", pendingTask=null;
+let voiceOn = localStorage.getItem("aath_voice") !== "off";  // AARTH speaks
+let ringEnabled = true;  // synced from server settings
 const $=s=>document.querySelector(s);
 const h=t=>{const d=document.createElement("div");d.textContent=t;return d.innerHTML;};
 
@@ -475,7 +520,7 @@ function addMsg(role,text,cites){
     el.appendChild(c);
   }
   $("#chatlog").appendChild(el); $("#chatlog").scrollTop=1e9;
-  if(role==="ai"&&ttsOn) speak(text);
+  if(role==="ai") speak(text);
 }
 async function send(){
   const msg=$("#chatInput").value.trim(); if(!msg) return;
@@ -513,7 +558,7 @@ async function loadNotifications(speakTop){
   renderNotif(list);
   // Ring for the first unseen call-level nudge (morning brief, overdue, P1 due).
   const call=pending.find(n=>n.alert_level==="call" && !shownCalls.has(n.id));
-  if(call && !activeCall){ shownCalls.add(call.id); showCall(call); return; }
+  if(call && !activeCall && ringEnabled){ shownCalls.add(call.id); showCall(call); return; }
   if(speakTop && pending.length && !activeCall) speak(pending[0].title+". "+pending[0].body);
 }
 
@@ -622,6 +667,7 @@ async function transcribe(blob){
 }
 // Streaming playback: append MP3 chunks to a MediaSource as they arrive (low latency).
 async function speak(text){
+  if(!voiceOn) return;
   const clean=(text||"").replace(/\[.*?\]/g,"").trim(); if(!clean||!token) return;
   try{
     const res=await fetch("/voice/tts",{method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({text:clean})});
@@ -692,6 +738,70 @@ function handleCapture(res){
     setTimeout(()=>{ if(!capMR) setCap(""); }, 4500);
   }
 }
+
+/* ── Settings ── */
+function fillHours(sel, selected){
+  sel.innerHTML="";
+  for(let huh=0;huh<24;huh++){
+    const label=String(huh).padStart(2,"0")+":00";
+    const o=document.createElement("option"); o.value=huh; o.textContent=label;
+    if(huh===selected) o.selected=true; sel.appendChild(o);
+  }
+}
+async function loadSettings(){
+  let me; try{ me=await api("/auth/me"); }catch(_){ return; }
+  ringEnabled = me.ring_enabled;
+  $("#setName").value = me.display_name;
+  // ensure current tz is an option
+  if(![...$("#setTz").options].some(o=>o.value===me.timezone)){
+    const o=document.createElement("option"); o.textContent=me.timezone; $("#setTz").appendChild(o);
+  }
+  $("#setTz").value = me.timezone;
+  fillHours($("#setMorning"), me.morning_hour);
+  fillHours($("#setEvening"), me.evening_hour);
+  fillHours($("#setQFrom"), me.quiet_hours_start);
+  fillHours($("#setQTo"), me.quiet_hours_end);
+  $("#setNoRing").checked = !me.ring_enabled;
+  $("#setVoice").checked = voiceOn;
+  $("#setStatus").textContent="";
+}
+$("#settingsBtn").onclick=()=>{ showTab("settings"); loadSettings(); };
+$("#saveSettings").onclick=async()=>{
+  $("#setStatus").textContent="Saving…";
+  voiceOn = $("#setVoice").checked; localStorage.setItem("aath_voice", voiceOn?"on":"off");
+  const body={
+    display_name:$("#setName").value.trim()||undefined,
+    timezone:$("#setTz").value,
+    morning_hour:parseInt($("#setMorning").value),
+    evening_hour:parseInt($("#setEvening").value),
+    quiet_hours_start:parseInt($("#setQFrom").value),
+    quiet_hours_end:parseInt($("#setQTo").value),
+    ring_enabled: !$("#setNoRing").checked,
+  };
+  try{
+    const me=await api("/auth/me/settings",{method:"PATCH",body});
+    ringEnabled=me.ring_enabled;
+    $("#setStatus").textContent="Saved ✓";
+    loadToday();
+  }catch(e){ $("#setStatus").textContent=e.message; }
+};
+
+/* ── PWA: service worker + install ── */
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+}
+let deferredPrompt=null;
+window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); deferredPrompt=e; });
+$("#installBtn").onclick=async()=>{
+  if(deferredPrompt){
+    deferredPrompt.prompt(); const {outcome}=await deferredPrompt.userChoice; deferredPrompt=null;
+    $("#installHint").textContent = outcome==="accepted" ? "Installed — check your home screen." : "No problem, you can install anytime.";
+  }else if(window.matchMedia("(display-mode: standalone)").matches){
+    $("#installHint").textContent="Already installed. 🎉";
+  }else{
+    $("#installHint").textContent="iPhone (Safari): Share → Add to Home Screen. Android (Chrome): ⋮ menu → Install app.";
+  }
+};
 
 if(token){enterApp().catch(logout);}
 </script>

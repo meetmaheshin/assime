@@ -28,6 +28,11 @@ class UserOut(BaseModel):
     email: EmailStr
     display_name: str
     timezone: str
+    quiet_hours_start: int
+    quiet_hours_end: int
+    morning_hour: int
+    evening_hour: int
+    ring_enabled: bool
     created_at: datetime
 
 
@@ -36,3 +41,6 @@ class SettingsUpdate(BaseModel):
     timezone: str | None = None
     quiet_hours_start: int | None = Field(default=None, ge=0, le=23)
     quiet_hours_end: int | None = Field(default=None, ge=0, le=23)
+    morning_hour: int | None = Field(default=None, ge=0, le=23)
+    evening_hour: int | None = Field(default=None, ge=0, le=23)
+    ring_enabled: bool | None = None

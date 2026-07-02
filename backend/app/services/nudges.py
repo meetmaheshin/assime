@@ -115,7 +115,7 @@ async def generate(
         await add("due_today", "Due today",
                   f"“{t.title}” is due today. Still on track?", t.id,
                   alert="call" if t.priority == 1 else "normal")
-    if force or 5 <= hour < 12:
+    if force or (user.morning_hour <= hour < 12):
         if meetings:
             def _fmt(m):
                 return f"{_local(m.starts_at, user.timezone):%H:%M} {m.title}"
@@ -126,7 +126,7 @@ async def generate(
         pend = f" Pending: {top}." if top else " Nothing pending — nice."
         await add("morning_brief", f"Good morning, {user.display_name}",
                   mtg + pend + " Want to start with the top one?", alert="call")
-    if force or 17 <= hour < 23:
+    if force or (user.evening_hour <= hour < 23):
         await add("evening_review", "Evening review",
                   "What did you complete today? Anything to move to tomorrow?")
 
