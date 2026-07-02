@@ -133,6 +133,15 @@
   .slabel{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
   .toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:13px 14px}
   .toggle input{width:20px;height:20px;accent-color:var(--accent)}
+  .plan{border-radius:18px;padding:18px;margin-bottom:20px;color:#fff;position:relative;overflow:hidden;
+    background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .plan .ptag{font-size:11px;letter-spacing:1.5px;opacity:.85;font-weight:700}
+  .plan .pname{font-size:20px;font-weight:800;margin-top:4px}
+  .plan .pprice{font-size:30px;font-weight:800;margin-top:8px}
+  .plan .pprice small{font-size:14px;font-weight:600;opacity:.85}
+  .plan ul{margin:12px 0 0;padding-left:18px;font-size:13px;opacity:.95;line-height:1.7}
+  .plan .pbtn{margin-top:14px;width:100%;background:#fff;color:var(--accent2);font-weight:700;padding:12px;border-radius:12px}
+  .plan .pbtn:active{transform:scale(.98)}
 
   /* Chat */
   #screen-chat{padding:0}
@@ -280,6 +289,20 @@
         <div class="pad">
           <div class="greeting" style="font-size:20px">Settings</div>
           <div class="muted" style="font-size:13px;margin-bottom:16px">How and when AARTH reaches you.</div>
+
+          <div class="plan">
+            <div class="ptag">SUBSCRIPTION</div>
+            <div class="pname">AARTH Pro</div>
+            <div class="pprice">₹499 <small>/ month</small></div>
+            <ul>
+              <li>Unlimited voice capture &amp; replies</li>
+              <li>Proactive call-style reminders</li>
+              <li>Long-term memory &amp; accountability</li>
+              <li>Daily briefings, meetings &amp; reviews</li>
+            </ul>
+            <button class="pbtn" id="upgradeBtn">Upgrade</button>
+          </div>
+
           <div class="stack" style="margin-top:0;gap:14px">
             <div><label class="slabel">Your name</label><input id="setName" /></div>
             <div><label class="slabel">Time zone</label>
@@ -770,6 +793,7 @@ async function loadSettings(){
   $("#setStatus").textContent="";
 }
 $("#settingsBtn").onclick=()=>{ showTab("settings"); loadSettings(); };
+$("#upgradeBtn").onclick=()=>{ $("#upgradeBtn").textContent="Coming soon 🚀"; setTimeout(()=>{ $("#upgradeBtn").textContent="Upgrade"; },2000); };
 $("#saveSettings").onclick=async()=>{
   $("#setStatus").textContent="Saving…";
   voiceOn = $("#setVoice").checked; localStorage.setItem("aath_voice", voiceOn?"on":"off");
