@@ -85,6 +85,7 @@
       <input id="password" placeholder="Password (min 8 chars)" type="password" />
       <div class="err" id="authErr"></div>
       <button class="btn-primary" id="authBtn">Sign in</button>
+      <button class="link" id="demoBtn">✨ Try the demo account</button>
       <button class="link" id="authToggle">New here? Create an account</button>
     </div>
   </div>
@@ -177,15 +178,39 @@ let ttsOn = true;
 const $ = s => document.querySelector(s);
 const h = (t)=>{const d=document.createElement("div");d.textContent=t;return d.innerHTML;};
 
+// Turn a FastAPI error `detail` (string, or list of Pydantic validation
+// errors) into one friendly sentence.
+function humanizeDetail(detail, fallback){
+  if(!detail) return fallback || "Something went wrong.";
+  if(typeof detail === "string") return detail;
+  if(Array.isArray(detail)){
+    const msgs = detail.map(e=>{
+      let m = (e.msg||"Invalid value").replace(/^Value error,\s*/i,"");
+      const field = Array.isArray(e.loc) ? e.loc[e.loc.length-1] : null;
+      if(field && field!=="body"){
+        const label = String(field).replace(/_/g," ");
+        m = m.charAt(0).toUpperCase()+m.slice(1);
+        return `${label.charAt(0).toUpperCase()+label.slice(1)}: ${m}`;
+      }
+      return m.charAt(0).toUpperCase()+m.slice(1);
+    });
+    return [...new Set(msgs)].join(". ");
+  }
+  return fallback || "Something went wrong.";
+}
+
 async function api(path, {method="GET", body=null, auth=true}={}){
   const headers = {};
   if(body) headers["Content-Type"]="application/json";
   if(auth && token) headers["Authorization"]="Bearer "+token;
-  const res = await fetch(API+path,{method,headers,body:body?JSON.stringify(body):null});
-  if(res.status===401){ logout(); throw new Error("Session expired"); }
+  let res;
+  try{
+    res = await fetch(API+path,{method,headers,body:body?JSON.stringify(body):null});
+  }catch(_){ throw new Error("Can't reach the server. Is it running?"); }
+  if(res.status===401){ if(token) logout(); throw new Error("Invalid email or password."); }
   const txt = await res.text();
   const data = txt ? JSON.parse(txt) : null;
-  if(!res.ok) throw new Error(data?.detail ? JSON.stringify(data.detail) : res.statusText);
+  if(!res.ok) throw new Error(humanizeDetail(data?.detail, res.statusText));
   return data;
 }
 
@@ -197,20 +222,31 @@ $("#authToggle").onclick = ()=>{
   $("#authToggle").textContent = mode==="login" ? "New here? Create an account" : "Have an account? Sign in";
   $("#authErr").textContent="";
 };
-$("#authBtn").onclick = async ()=>{
+function validAuth(email, password){
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Please enter a valid email address.";
+  if(password.length < 8) return "Password must be at least 8 characters.";
+  if(mode==="register" && !$("#dnameRow").value.trim()) return "Please tell me your name.";
+  return null;
+}
+async function doAuth(email, password){
   $("#authErr").textContent="";
+  const problem = validAuth(email, password);
+  if(problem){ $("#authErr").textContent = problem; return; }
+  const btn=$("#authBtn"); const label=btn.textContent; btn.disabled=true; btn.textContent="…";
   try{
-    const email=$("#email").value.trim(), password=$("#password").value;
-    let res;
-    if(mode==="register"){
-      res = await api("/auth/register",{method:"POST",auth:false,body:{email,password,display_name:$("#dnameRow").value.trim()||"there"}});
-    }else{
-      res = await api("/auth/login",{method:"POST",auth:false,body:{email,password}});
-    }
+    const path = mode==="register" ? "/auth/register" : "/auth/login";
+    const body = mode==="register"
+      ? {email,password,display_name:$("#dnameRow").value.trim()}
+      : {email,password};
+    const res = await api(path,{method:"POST",auth:false,body});
     token = res.access_token; localStorage.setItem("jarvis_token",token);
     enterApp();
   }catch(e){ $("#authErr").textContent = e.message; }
-};
+  finally{ btn.disabled=false; btn.textContent=label; }
+}
+$("#authBtn").onclick = ()=>doAuth($("#email").value.trim(), $("#password").value);
+$("#password").addEventListener("keydown",e=>{ if(e.key==="Enter") $("#authBtn").click(); });
+$("#demoBtn").onclick = ()=>{ mode="login"; $("#email").value="demo@jarvis.app"; $("#password").value="demo12345"; doAuth("demo@jarvis.app","demo12345"); };
 
 function logout(){ token=null; localStorage.removeItem("jarvis_token"); $("#app").classList.add("hidden"); $("#auth").classList.remove("hidden"); }
 $("#logoutBtn").onclick = logout;
