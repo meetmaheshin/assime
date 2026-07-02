@@ -55,6 +55,7 @@ class DuplicateMatch(BaseModel):
     title: str
     similarity: float
     status: str
+    completed_at: datetime | None = None
 
 
 class TaskCreateResult(BaseModel):
@@ -62,6 +63,7 @@ class TaskCreateResult(BaseModel):
     the user: same / new / follow-up (per PRD duplicate detection)."""
 
     task: TaskOut | None
+    message: str | None = None
     possible_duplicates: list[DuplicateMatch] = Field(default_factory=list)
 
 

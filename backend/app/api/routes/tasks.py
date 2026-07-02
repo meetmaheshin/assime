@@ -1,6 +1,8 @@
 """User-scoped task CRUD with duplicate detection, completion, and overdue reasons."""
+import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -9,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.models.meeting import Meeting
 from app.models.task import Task, TaskHistory
 from app.models.user import User
 from app.schemas.capture import CaptureDraft, CaptureRequest, CaptureResponse
@@ -30,6 +33,11 @@ _VALID_REASONS = {
     "blocked", "forgot", "too_busy", "waiting", "not_important", "other",
 }
 
+# Utterances that mean "put an event on my calendar", not "add a to-do".
+_MEETING_RE = re.compile(
+    r"\b(meeting|meet with|sync|stand\s?up|1:1|one[ -]on[ -]one|appointment|"
+    r"interview|catch\s?up|(coffee|lunch|dinner)\b|call with|call at)\b", re.I)
+
 
 async def _get_owned(db: AsyncSession, user: User, task_id: uuid.UUID) -> Task:
     # Eager-load history so mutation endpoints can append to it without an
@@ -47,6 +55,29 @@ def _log(task: Task, event: str, detail: str | None = None,
     task.history.append(
         TaskHistory(event=event, detail=detail, reason_code=reason_code)
     )
+
+
+async def _build_dupes(db: AsyncSession, dupes: list) -> tuple[list[DuplicateMatch], str | None]:
+    """Resolve duplicate memories to live tasks and craft a human, status-aware
+    prompt — including already-completed work ("did something slip?")."""
+    matches: list[DuplicateMatch] = []
+    for mem, sim in dupes:
+        dt = await db.get(Task, mem.source_id) if mem.source_id else None
+        if dt is not None:
+            matches.append(DuplicateMatch(
+                id=dt.id, title=dt.title, similarity=round(sim, 3),
+                status=dt.status, completed_at=dt.completed_at))
+    if not matches:
+        return matches, None
+    top = matches[0]
+    if top.status == "completed":
+        when = f" on {top.completed_at.date().isoformat()}" if top.completed_at else ""
+        msg = (f"You already completed “{top.title}”{when}. Is this a new one, or "
+               f"did something slip and it needs doing again?")
+    else:
+        msg = (f"“{top.title}” is already on your list ({top.status}). Same task, "
+               f"a follow-up, or something new?")
+    return matches, msg
 
 
 @router.get("", response_model=list[TaskOut])
@@ -77,21 +108,9 @@ async def create_task(
         dupes = await memory_service.find_duplicates(
             db, llm, user_id=user.id, text=probe
         )
-        if dupes:
-            matches = []
-            for mem, sim in dupes:
-                dup_task = (
-                    await db.get(Task, mem.source_id) if mem.source_id else None
-                )
-                if dup_task is not None:
-                    matches.append(
-                        DuplicateMatch(
-                            id=dup_task.id, title=dup_task.title,
-                            similarity=round(sim, 3), status=dup_task.status,
-                        )
-                    )
-            if matches:
-                return TaskCreateResult(task=None, possible_duplicates=matches)
+        matches, msg = await _build_dupes(db, dupes)
+        if matches:
+            return TaskCreateResult(task=None, message=msg, possible_duplicates=matches)
 
     task = Task(
         user_id=user.id,
@@ -143,7 +162,12 @@ async def capture_task(
 ) -> CaptureResponse:
     """Conversational (voice) task capture: extract a task from natural speech,
     ask back for the 'why' if it's missing, then save (with dedupe)."""
-    now = datetime.now(timezone.utc)
+    # Resolve relative times ("at 4", "tomorrow") against the user's LOCAL time,
+    # not UTC, so "4" means 4pm their zone.
+    try:
+        now = datetime.now(timezone.utc).astimezone(ZoneInfo(user.timezone))
+    except Exception:
+        now = datetime.now(timezone.utc)
     draft = payload.draft or CaptureDraft()
     utter = payload.utterance.strip()
     answering = draft.pending
@@ -159,6 +183,22 @@ async def capture_task(
         draft.pending = None
     else:
         fields = await capture_svc.extract_fields(llm, utter, now)
+        # Calendar intent → create a meeting (no "why" needed) and return.
+        if answering is None and _MEETING_RE.search(utter):
+            starts = fields["deadline"] or (
+                now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+            title = fields["title"] or "Meeting"
+            meeting = Meeting(user_id=user.id, title=title, starts_at=starts,
+                              notes=fields["reason"])
+            db.add(meeting)
+            await db.commit()
+            await db.refresh(meeting)
+            try:
+                when = starts.astimezone(ZoneInfo(user.timezone)).strftime("%a %H:%M")
+            except Exception:
+                when = starts.strftime("%a %H:%M")
+            return CaptureResponse(action="created", draft=draft, created_kind="meeting",
+                                   message=f"Added to your calendar: {title} at {when}.")
         if answering == "title":
             draft.title = fields["title"] or utter or "New task"
         else:
@@ -184,19 +224,15 @@ async def capture_task(
     if not payload.skip_duplicate_check:
         probe = f"{draft.title}. {draft.reason or ''}".strip()
         dupes = await memory_service.find_duplicates(db, llm, user_id=user.id, text=probe)
-        matches = []
-        for mem, sim in dupes:
-            dt = await db.get(Task, mem.source_id) if mem.source_id else None
-            if dt is not None:
-                matches.append(DuplicateMatch(
-                    id=dt.id, title=dt.title, similarity=round(sim, 3), status=dt.status))
+        matches, msg = await _build_dupes(db, dupes)
         if matches:
-            return CaptureResponse(action="duplicate", draft=draft,
+            return CaptureResponse(action="duplicate", draft=draft, message=msg,
                                    possible_duplicates=matches)
 
     task = await _persist_task(db, user, draft)
-    return CaptureResponse(action="created", draft=draft,
-                           task=TaskOut.model_validate(task))
+    return CaptureResponse(action="created", draft=draft, created_kind="task",
+                           task=TaskOut.model_validate(task),
+                           message=f"Added “{task.title}”. I'll keep you accountable.")
 
 
 @router.get("/{task_id}", response_model=TaskOut)

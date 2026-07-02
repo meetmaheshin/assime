@@ -27,4 +27,7 @@ class CaptureResponse(BaseModel):
     question: str | None = None
     draft: CaptureDraft
     task: TaskOut | None = None
+    # created item kind ("task" | "meeting") and a ready-made confirmation line.
+    created_kind: str | None = None
+    message: str | None = None
     possible_duplicates: list[DuplicateMatch] = Field(default_factory=list)

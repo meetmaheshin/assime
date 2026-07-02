@@ -84,6 +84,12 @@ async def chat(
     ])
     await db.commit()
 
+    # Keep raw conversation bounded: summarize + prune old turns when they pile up.
+    try:
+        await memory_service.prune_conversation(db, llm, user_id=user.id)
+    except Exception:
+        pass
+
     # Citations only for real answers, and only clearly-relevant memories.
     citations = []
     if settings.resolved_provider != "stub":

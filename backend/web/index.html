@@ -217,7 +217,7 @@
 
           <div id="overdueBanner"></div>
           <div id="meetingsBox"></div>
-          <div class="h">Today's priorities</div>
+          <div class="h">Your tasks</div>
           <div id="priorities"><div class="muted">Nothing yet.</div></div>
         </div>
       </section>
@@ -315,8 +315,8 @@
     </button>
 
     <nav class="bottomnav">
-      <button class="nav active" data-tab="today"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></span>Today</button>
-      <button class="nav" data-tab="chat"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span>Chat</button>
+      <button class="nav active" data-tab="chat"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span>Chat</button>
+      <button class="nav" data-tab="today"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></span>Today</button>
       <button class="nav" data-tab="add"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg></span>Add</button>
       <button class="nav" data-tab="memory"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3z"/></svg></span>Memory</button>
     </nav>
@@ -340,8 +340,8 @@
     <!-- DUP MODAL -->
     <div id="dupOverlay" class="overlay hidden">
       <div class="modal">
-        <div style="font-size:18px;font-weight:700">I found similar work</div>
-        <div class="muted" style="font-size:14px;margin-top:4px">Same, new, or a follow-up? I won't duplicate blindly.</div>
+        <div style="font-size:18px;font-weight:700">Wait — I remember this</div>
+        <div class="muted" id="dupMsg" style="font-size:14px;margin-top:4px">Same, new, or a follow-up? I won't duplicate blindly.</div>
         <div id="dupList" style="margin-top:12px"></div>
         <div style="display:flex;gap:10px;margin-top:16px">
           <button class="btn-primary" id="dupNew" style="flex:1">It's new</button>
@@ -434,7 +434,8 @@ document.querySelectorAll(".nav").forEach(n=>n.onclick=()=>showTab(n.dataset.tab
 /* App */
 async function enterApp(){
   $("#auth").classList.add("hidden"); $("#app").classList.remove("hidden");
-  $("#chatlog").innerHTML=""; showTab("today"); await loadToday();
+  $("#chatlog").innerHTML=""; await loadToday();  // populates Today + posts the greeting
+  showTab("chat");  // chat is the home screen — it's a conversation first
   loadNotifications();
   if(notifTimer) clearInterval(notifTimer);
   notifTimer=setInterval(loadNotifications, 30000);  // proactive polling
@@ -456,7 +457,11 @@ async function loadToday(){
         return `<div class="meeting"><span class="mt">${hh}</span><span>${h(m.title)}</span></div>`;
       }).join("");
     } else mb.innerHTML="";
-    renderPriorities(t.priorities);
+    // Show ALL open tasks (not just the top 3) so nothing you add is hidden.
+    let all=[]; try{ all=await api("/tasks"); }catch(_){ all=t.priorities; }
+    const open=all.filter(x=>x.status!=="completed")
+      .sort((a,b)=> a.priority-b.priority || ((a.deadline||"~")>(b.deadline||"~")?1:-1));
+    renderPriorities(open);
     if(!$("#chatlog").children.length){
       addMsg("ai", t.greeting+(t.priorities.length?` Your top priority is “${t.priorities[0].title}”. Want to start there?`:" What would you like to get done today?"),[]);
     }
@@ -485,17 +490,19 @@ async function createTask(skip){
   const d=$("#ntDeadline").value; if(d) body.deadline=new Date(d).toISOString();
   try{
     const res=await api("/tasks",{method:"POST",body});
-    if(res.task===null&&res.possible_duplicates.length){showDup(res.possible_duplicates,{type:"form",body});return;}
+    if(res.task===null&&res.possible_duplicates.length){showDup(res.possible_duplicates,{type:"form",body},res.message);return;}
     $("#ntTitle").value="";$("#ntReason").value="";$("#ntDeadline").value="";
     addMsg("ai",`Added “${title}”. I'll keep you accountable.`,[]);
     await loadToday(); showTab("today");
   }catch(e){alert(e.message);}
 }
 let dupCtx=null; // {type:'form', body} | {type:'capture', draft}
-function showDup(dupes,ctx){
+function showDup(dupes,ctx,message){
   dupCtx=ctx;
+  if(message) $("#dupMsg").textContent=message;
   $("#dupList").innerHTML=dupes.map(d=>`<div class="dupitem"><b>${h(d.title)}</b> <span class="pill">${Math.round(d.similarity*100)}% match</span> <span class="muted">· ${d.status}</span></div>`).join("");
   $("#dupOverlay").classList.remove("hidden");
+  if(message) speak(message);
 }
 $("#dupCancel").onclick=()=>{$("#dupOverlay").classList.add("hidden");dupCtx=null;captureDraft=null;setCap("Cancelled.");};
 $("#dupNew").onclick=async()=>{
@@ -588,19 +595,15 @@ function showCall(n){
 }
 function closeCall(){ stopRing(); $("#callOverlay").classList.add("hidden"); activeCall=null; }
 $("#callAnswer").onclick=async()=>{
-  if(!activeCall) return; const n=activeCall; stopRing();
-  $("#callKicker").textContent="Connected"; $("#callBody").textContent=n.body; speak(n.body);
-  if(n.kind==="overdue"){
-    $("#callActions").style.display="none";
-    $("#callReasons").innerHTML=REASONS.map(r=>`<button class="reason" data-code="${r[0]}">${r[1]}</button>`).join("");
-    $("#callReasons").querySelectorAll(".reason").forEach(b=>b.onclick=async()=>{
-      try{ const res=await api(`/notifications/${n.id}/respond`,{method:"POST",body:{reason_code:b.dataset.code}}); speak(res.message); }catch(_){}
-      closeCall(); loadNotifications();
-    });
-  }else{
-    try{ await api(`/notifications/${n.id}/respond`,{method:"POST",body:{text:"acknowledged"}}); }catch(_){}
-    setTimeout(()=>{ closeCall(); loadNotifications(); }, 2500);
-  }
+  if(!activeCall) return; const n=activeCall; stopRing(); closeCall();
+  // Answering drops you into a real conversation: AARTH opens with the nudge,
+  // you reply by text or voice, and it responds (grounded in your memory).
+  showTab("chat");
+  addMsg("ai", n.body, []);   // spoken via Cartesia (if voice on)
+  // Mark it handled so it clears the badge and won't ring again.
+  try{ await api(`/notifications/${n.id}/respond`,{method:"POST",body:{text:"opened in chat"}}); }catch(_){}
+  loadNotifications();
+  $("#chatInput").focus();
 };
 $("#callSnooze").onclick=async()=>{ if(!activeCall)return; const n=activeCall; stopRing();
   try{ await api(`/notifications/${n.id}/snooze?minutes=10`,{method:"POST"}); }catch(_){}
@@ -728,14 +731,15 @@ function handleCapture(res){
     setCap(res.question+"<br><span class='muted' style='font-size:12px'>Tap the mic to answer.</span>");
     speak(res.question);
   }else if(res.action==="duplicate"){
-    setCap("I found similar work — same, new, or a follow-up?");
-    showDup(res.possible_duplicates,{type:"capture",draft:res.draft});
+    setCap(res.message || "I remember something similar — same, new, or a follow-up?");
+    showDup(res.possible_duplicates,{type:"capture",draft:res.draft},res.message);
   }else if(res.action==="created"){
     captureDraft=null;
-    setCap("✓ Added “"+res.task.title+"”");
-    speak("Added "+res.task.title);
+    const msg=res.message || ("Added “"+(res.task?res.task.title:"it")+"”");
+    setCap("✓ "+msg);
+    speak(msg);
     loadToday();
-    setTimeout(()=>{ if(!capMR) setCap(""); }, 4500);
+    setTimeout(()=>{ if(!capMR) setCap(""); }, 5000);
   }
 }
 

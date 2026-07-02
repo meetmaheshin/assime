@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.models.conversation import ConversationTurn
 from app.models.memory import Memory
 from app.services.llm import LLMClient
 
@@ -75,6 +76,49 @@ async def search(
 
     rows = (await db.execute(stmt)).all()
     return [(row[0], 1.0 - float(row[1])) for row in rows]
+
+
+async def prune_conversation(
+    db: AsyncSession,
+    llm: LLMClient,
+    *,
+    user_id: uuid.UUID,
+    keep: int = 40,
+    batch: int = 20,
+) -> bool:
+    """Keep raw conversation bounded: once it grows past keep+batch, fold the
+    oldest `batch` turns into a single durable summary memory and delete the
+    raw rows. Semantic recall of old chats is preserved (as a summary) while
+    storage stays small. Returns True if it pruned."""
+    total = await db.scalar(
+        select(func.count(ConversationTurn.id)).where(ConversationTurn.user_id == user_id)
+    ) or 0
+    if total <= keep + batch:
+        return False
+
+    oldest = list(await db.scalars(
+        select(ConversationTurn).where(ConversationTurn.user_id == user_id)
+        .order_by(ConversationTurn.created_at).limit(batch)
+    ))
+    if not oldest:
+        return False
+
+    transcript = "\n".join(f"{t.role}: {t.content}" for t in oldest)
+    try:
+        summary = await llm.complete(
+            "Summarize the key facts, decisions, commitments, names, tasks and "
+            "dates from this conversation excerpt in 2-4 sentences. Be specific.",
+            transcript, reasoning=False,
+        )
+    except Exception:
+        summary = ""
+    if summary and not summary.startswith("[stub"):
+        await remember(db, llm, user_id=user_id, kind="summary",
+                       content=summary, confidence=70, commit=False)
+    for t in oldest:
+        await db.delete(t)
+    await db.commit()
+    return True
 
 
 async def find_duplicates(
