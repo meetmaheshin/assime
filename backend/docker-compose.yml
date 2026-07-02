@@ -1,0 +1,41 @@
+# Explicit project name so this stack never merges with another compose project
+# that happens to live in a folder also named "backend".
+name: jarvis
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: jarvis-postgres
+    environment:
+      POSTGRES_USER: jarvis
+      POSTGRES_PASSWORD: jarvis
+      POSTGRES_DB: jarvis
+    # Host ports chosen to avoid conflicts with other local stacks
+    # (5432 pet-medicine, 5433 yp, 5434 debaitme are all taken).
+    ports:
+      - "5435:5432"
+    volumes:
+      - jarvis_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jarvis -d jarvis"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: jarvis-redis
+    # 6379 (debaitme) and 6380 (yp) are taken; use 6381.
+    ports:
+      - "6381:6379"
+    volumes:
+      - jarvis_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  jarvis_pgdata:
+  jarvis_redisdata:
