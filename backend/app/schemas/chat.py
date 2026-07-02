@@ -19,6 +19,8 @@ class ChatResponse(BaseModel):
     reply: str
     # Memories the answer was grounded in (retrieve-then-generate transparency).
     citations: list[MemoryCitation] = Field(default_factory=list)
+    # Tools the agent invoked this turn (debug/transparency).
+    actions: list = Field(default_factory=list)
 
 
 class MemorySearchRequest(BaseModel):

@@ -42,7 +42,7 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["meta"])
     async def health() -> dict:
         # Bump `version` on meaningful changes so we can confirm what's deployed.
-        return {"status": "ok", "env": settings.env, "version": "agent-2"}
+        return {"status": "ok", "env": settings.env, "version": "agent-3dbg"}
 
     app.include_router(auth.router)
     app.include_router(projects.router)

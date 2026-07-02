@@ -71,6 +71,7 @@ async def chat(
         db, llm, user_id=user.id, query=payload.message, limit=8
     )
 
+    actions: list = []
     if settings.resolved_provider == "stub":
         reply = _stub_reply(user.display_name, payload.message, hits)
     else:
@@ -82,7 +83,9 @@ async def chat(
             .order_by(ConversationTurn.created_at.desc()).limit(10)))
         history = [{"role": t.role, "content": t.content} for t in reversed(history_rows)]
         try:
-            reply = await agent.run(db, user, payload.message, history, context)
+            result = await agent.run(db, user, payload.message, history, context)
+            reply = result["reply"]
+            actions = result["actions"]
         except Exception:
             # Never 500 on an upstream AI error — degrade to a calm message.
             logging.exception("chat agent failed")
@@ -111,7 +114,7 @@ async def chat(
             )
             for mem, sim in hits if sim >= _CITE_MIN_SIMILARITY
         ]
-    return ChatResponse(reply=reply, citations=citations)
+    return ChatResponse(reply=reply, citations=citations, actions=actions)
 
 
 @router.get("/chat/history")

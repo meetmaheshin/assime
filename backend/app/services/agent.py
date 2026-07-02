@@ -121,14 +121,17 @@ _EXECUTORS = {
 
 async def run(
     db: AsyncSession, user: User, message: str, history: list[dict], context: str
-) -> str:
+) -> dict:
     """Tool-calling chat. `history` is prior turns [{role, content}]; `context`
-    is retrieved memory. Returns the assistant's final reply."""
+    is retrieved memory. Returns {reply, actions} — actions is a debug trail of
+    the tools invoked and their results."""
+    actions: list[dict] = []
     client, model = build_chat_client()
     if client is None:  # no tool-capable provider
-        return await llm.complete(
+        reply = await llm.complete(
             f"You are {user.assistant_name}, a concise, warm executive assistant.",
             f"{context}\n\nUser: {message}", reasoning=True)
+        return {"reply": reply, "actions": actions}
 
     try:
         now = datetime.now(timezone.utc).astimezone(ZoneInfo(user.timezone))
@@ -170,7 +173,7 @@ async def run(
             tool_choice="auto", temperature=0.3)
         msg = resp.choices[0].message
         if not msg.tool_calls:
-            return (msg.content or "").strip()
+            return {"reply": (msg.content or "").strip(), "actions": actions}
         messages.append({
             "role": "assistant", "content": msg.content or "",
             "tool_calls": [{
@@ -186,12 +189,13 @@ async def run(
             try:
                 result = await executor(db, user, now, args) if executor \
                     else f"Unknown tool {tc.function.name}."
-            except Exception:
+            except Exception as e:
                 logging.exception("agent tool %s failed", tc.function.name)
-                result = "That action failed."
+                result = f"FAILED: {type(e).__name__}: {e}"
+            actions.append({"tool": tc.function.name, "args": args, "result": result})
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
 
     # Ran out of tool rounds — ask the model to wrap up in plain text.
     resp = await client.chat.completions.create(
         model=model, messages=messages, temperature=0.3)
-    return (resp.choices[0].message.content or "").strip()
+    return {"reply": (resp.choices[0].message.content or "").strip(), "actions": actions}
