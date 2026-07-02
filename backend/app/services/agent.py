@@ -38,10 +38,13 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "title": {"type": "string"},
             "starts_at": {"type": "string", "description": "ISO 8601 datetime"},
+            "force": {"type": "boolean", "description": "set true ONLY after the "
+                      "user confirms adding despite a scheduling conflict"},
         }, "required": ["title", "starts_at"]}}},
     {"type": "function", "function": {
         "name": "complete_task",
-        "description": "Mark an existing task as done.",
+        "description": "Mark an existing task as done. Call this WHENEVER the user "
+        "says they finished, did, completed, or are done with something.",
         "parameters": {"type": "object", "properties": {
             "title": {"type": "string", "description": "task title (fuzzy match ok)"},
         }, "required": ["title"]}}},
@@ -93,13 +96,33 @@ async def _create_meeting(db, user, now, args) -> str:
     starts = _parse_dt(args.get("starts_at"), now)
     if not title or not starts:
         return "Need a title and a time."
+    rolled = False
+    if starts < now:  # requested time already passed today -> next day
+        starts = starts + timedelta(days=1)
+        rolled = True
+    # Conflict check: warn instead of silently double-booking.
+    if not args.get("force"):
+        window = timedelta(minutes=20)
+        clash = await db.scalar(select(Meeting).where(
+            Meeting.user_id == user.id,
+            Meeting.starts_at >= starts - window,
+            Meeting.starts_at <= starts + window).limit(1))
+        if clash is not None:
+            try:
+                cw = clash.starts_at.astimezone(ZoneInfo(user.timezone)).strftime("%H:%M")
+            except Exception:
+                cw = clash.starts_at.strftime("%H:%M")
+            return (f'CONFLICT: the user already has "{clash.title}" at {cw}. Tell '
+                    "them about this clash and ask if they still want both; only if "
+                    "they confirm, call create_meeting again with force=true.")
     db.add(Meeting(user_id=user.id, title=title, starts_at=starts))
     await db.commit()
     try:
         when = starts.astimezone(ZoneInfo(user.timezone)).strftime("%a %d %b %H:%M")
     except Exception:
         when = starts.strftime("%a %d %b %H:%M")
-    return f'Added meeting "{title}" at {when}.'
+    note = " (that time had passed today, so I scheduled the next day)" if rolled else ""
+    return f'Added meeting "{title}" at {when}.{note}'
 
 
 async def _complete_task(db, user, now, args) -> str:
@@ -145,30 +168,45 @@ async def run(
     except Exception:
         now = datetime.now(timezone.utc)
 
+    # Give the agent the real picture so it can reason like a PA.
+    def _loc(dt, fmt="%a %H:%M"):
+        try:
+            return dt.astimezone(ZoneInfo(user.timezone)).strftime(fmt)
+        except Exception:
+            return dt.strftime(fmt)
+
+    tasks = list(await db.scalars(
+        select(Task).where(Task.user_id == user.id, Task.status != "completed")
+        .order_by(Task.priority).limit(8)))
+    task_lines = "; ".join(
+        f"P{t.priority} {t.title}" + (f" (due {_loc(t.deadline)})" if t.deadline else "")
+        for t in tasks) or "none"
+    upcoming = list(await db.scalars(
+        select(Meeting).where(Meeting.user_id == user.id,
+                              Meeting.starts_at >= now - timedelta(hours=1))
+        .order_by(Meeting.starts_at).limit(6)))
+    mtg_lines = "; ".join(f"{_loc(m.starts_at)} {m.title}" for m in upcoming) or "none"
+
     system = (
-        f"You are {user.assistant_name}, {user.display_name}'s executive assistant.\n"
-        "LANGUAGE RULE (most important): ALWAYS reply in the exact same language the "
-        "user's latest message uses. If they wrote in Hinglish (Romanized Hindi like "
-        "'mujhe kal meeting set karni hai'), you MUST reply in Hinglish (e.g. 'Theek "
-        "hai, kal ki meeting set kar di hai'). If Hindi, reply Hindi. If English, "
-        "English. Never switch to English when the user wrote Hindi/Hinglish.\n"
-        "Be warm and brief — 1-2 short sentences.\n"
-        "ACT, don't ask: when the user wants something added, scheduled, set, "
-        "reminded, or completed, call the tool immediately and confirm it's DONE. "
-        "Do NOT ask 'would you like me to…' or ask for confirmation before acting. "
-        "Only ask a question if a REQUIRED detail is genuinely missing (e.g. no "
-        "time was given at all). Never repeat a question you already asked.\n"
-        "A meeting or task that has a time already IS its reminder — never offer "
-        "to set a separate reminder; just confirm it's scheduled and that you'll "
-        "remind them.\n"
-        f"Current date-time: {now.isoformat()} — the year is {now.year}. ALWAYS "
-        f"use year {now.year} for 'today'/'tomorrow'; never a past year. Resolve "
-        "relative times ('4am', 'tomorrow') against it. Use the user's name "
-        "rarely, not every message. "
-        "Never invent facts.\n"
-        "LANGUAGE: reply in the SAME language and style the user uses. If they "
-        "write in Hindi or Hinglish (Romanized Hindi), reply in natural Hinglish; "
-        "if English, reply in English. Mirror them.\n\n"
+        f"You are {user.assistant_name}, {user.display_name}'s executive assistant. "
+        "Think and act like a sharp human PA, not a form-filler.\n"
+        "LANGUAGE (most important): reply in the EXACT language of the user's latest "
+        "message. Hinglish in -> Hinglish out; Hindi -> Hindi; English -> English. "
+        "Never switch to English when they wrote Hindi/Hinglish.\n"
+        "REASON like a PA: use the Current state and recent conversation to be "
+        "genuinely useful — connect a new request to their existing tasks/meetings, "
+        "flag clashes, tight timing, or prep needed, and check in on the status of "
+        "pending things when relevant. Ask ONE smart clarifying question when the "
+        "request is ambiguous or missing a needed detail; otherwise just act.\n"
+        "ACT: to add/schedule/complete something, call the tool and confirm it's "
+        "DONE — don't ask 'would you like me to…'. When they say they finished/did/"
+        "completed something, call complete_task. A timed meeting/task IS its own "
+        "reminder. If create_meeting reports a CONFLICT, tell them and ask before "
+        "adding both. If a time already passed today, use the next day.\n"
+        "Don't blindly repeat old titles/times from history, but DO use context to "
+        "reason. Keep replies to 1-3 short sentences. Use their name rarely. Never "
+        f"invent facts. Now: {now.isoformat()} (year {now.year}; never a past year).\n\n"
+        f"Current state —\nTasks: {task_lines}\nUpcoming meetings: {mtg_lines}\n\n"
         f"Relevant memory:\n{context}"
     )
 

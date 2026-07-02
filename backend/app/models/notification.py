@@ -34,6 +34,12 @@ class Notification(Base, UUIDMixin, TimestampMixin):
         index=True,
         nullable=True,
     )
+    meeting_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("meetings.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
+    )
     # pending | answered | dismissed
     status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
     # normal (silent badge) | call (ring + vibrate + incoming-call UI)

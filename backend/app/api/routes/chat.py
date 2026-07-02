@@ -7,8 +7,8 @@ hallucinate (PRD AI behaviour).
 """
 import logging
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -127,6 +127,18 @@ async def chat_history(
         select(ConversationTurn).where(ConversationTurn.user_id == user.id)
         .order_by(ConversationTurn.created_at.desc()).limit(50)))
     return [{"role": t.role, "content": t.content} for t in reversed(rows)]
+
+
+@router.delete("/chat/history", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_history(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Start a fresh conversation — clears prior turns so old context stops
+    bleeding into new requests. Tasks/meetings/memories are untouched."""
+    await db.execute(
+        delete(ConversationTurn).where(ConversationTurn.user_id == user.id))
+    await db.commit()
 
 
 @router.post("/memory/search", response_model=list[MemorySearchHit])
