@@ -15,6 +15,10 @@ redis==5.2.1
 # Timezone database (Windows has no system zoneinfo) — for per-user local time
 tzdata==2024.2
 
+# Web Push (VAPID) + background scheduler for reminders when the app is closed
+pywebpush==2.0.0
+apscheduler==3.11.0
+
 # ─── Config / validation ──────────────────────
 pydantic==2.10.4
 pydantic-settings==2.7.0

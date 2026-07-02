@@ -4,6 +4,7 @@ from app.models.meeting import Meeting
 from app.models.memory import Memory
 from app.models.notification import Notification
 from app.models.project import Project
+from app.models.push import PushSubscription
 from app.models.task import Task, TaskHistory
 from app.models.user import User
 
@@ -16,4 +17,5 @@ __all__ = [
     "ConversationTurn",
     "Notification",
     "Meeting",
+    "PushSubscription",
 ]

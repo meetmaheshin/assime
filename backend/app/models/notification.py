@@ -7,7 +7,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -48,3 +48,5 @@ class Notification(Base, UUIDMixin, TimestampMixin):
     snoozed_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Whether a web-push was already delivered for this nudge (send once).
+    pushed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

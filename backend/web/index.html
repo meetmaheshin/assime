@@ -325,6 +325,8 @@
             </div>
             <label class="toggle"><span>Don't ring — silent notifications only</span><input type="checkbox" id="setNoRing" /></label>
             <label class="toggle"><span>Voice replies (AARTH speaks)</span><input type="checkbox" id="setVoice" checked /></label>
+            <label class="toggle"><span>Push reminders (even when app is closed)</span><input type="checkbox" id="setPush" /></label>
+            <button class="btn-sm" id="testPushBtn" style="width:100%">Send test reminder</button>
             <button class="btn-primary" id="saveSettings">Save settings</button>
             <div id="setStatus" class="muted" style="font-size:13px;min-height:16px"></div>
             <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
@@ -483,6 +485,7 @@ async function enterApp(){
   await loadToday();               // populates Today + posts greeting only if chat is empty
   showTab("chat");                 // chat is the home screen — a conversation first
   loadNotifications();
+  ensurePush();  // keep the push subscription fresh if enabled
   if(notifTimer) clearInterval(notifTimer);
   notifTimer=setInterval(loadNotifications, 30000);  // proactive polling
 }
@@ -848,10 +851,16 @@ async function loadSettings(){
   fillHours($("#setQTo"), me.quiet_hours_end);
   $("#setNoRing").checked = !me.ring_enabled;
   $("#setVoice").checked = voiceOn;
+  $("#setPush").checked = (localStorage.getItem("aath_push")==="on") &&
+    ("Notification" in window) && Notification.permission==="granted";
   $("#setStatus").textContent="";
   try{ const hv=await api("/health"); $("#appVersion").textContent="Version: "+(hv.version||"?"); }catch(_){}
 }
 $("#settingsBtn").onclick=()=>{ showTab("settings"); loadSettings(); };
+$("#setPush").onchange=async(e)=>{
+  if(e.target.checked){ e.target.checked = await enablePush(); }
+  else { localStorage.setItem("aath_push","off"); toast("Reminders off on this device"); }
+};
 $("#newChatBtn").onclick=async()=>{
   try{ await api("/chat/history",{method:"DELETE"}); }catch(_){}
   $("#chatlog").innerHTML=""; try{ shownChat.clear(); }catch(_){}
@@ -878,6 +887,32 @@ $("#saveSettings").onclick=async()=>{
     $("#setStatus").textContent="Saved ✓";
     loadToday();
   }catch(e){ $("#setStatus").textContent=e.message; }
+};
+
+/* ── Web Push ── */
+function urlB64ToUint8(b64){
+  const pad="=".repeat((4-b64.length%4)%4);
+  const s=(b64+pad).replace(/-/g,"+").replace(/_/g,"/");
+  const raw=atob(s); return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+async function enablePush(){
+  if(!("serviceWorker" in navigator)||!("PushManager" in window)){ toast("Push isn't supported on this browser"); return false; }
+  const perm=await Notification.requestPermission();
+  if(perm!=="granted"){ toast("Allow notifications in your browser to get reminders"); return false; }
+  let key; try{ key=await api("/push/key"); }catch(_){ return false; }
+  if(!key.enabled||!key.key){ toast("Push isn't configured on the server yet"); return false; }
+  const reg=await navigator.serviceWorker.ready;
+  let sub=await reg.pushManager.getSubscription();
+  if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:urlB64ToUint8(key.key)});
+  await api("/push/subscribe",{method:"POST",body:sub.toJSON()});
+  localStorage.setItem("aath_push","on");
+  return true;
+}
+async function ensurePush(){ if(localStorage.getItem("aath_push")==="on"){ try{ await enablePush(); }catch(_){} } }
+$("#testPushBtn").onclick=async()=>{
+  const ok = localStorage.getItem("aath_push")==="on" || await enablePush();
+  if(!ok) return;
+  try{ const r=await api("/push/test",{method:"POST"}); toast(r.delivered? "Test reminder sent 🔔":"Subscribed, but no device got it"); }catch(e){ toast(e.message); }
 };
 
 /* ── PWA: service worker + install ── */

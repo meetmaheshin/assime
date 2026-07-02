@@ -102,6 +102,15 @@ class Settings(BaseSettings):
     def voice_enabled(self) -> bool:
         return bool(self.cartesia_api_key)
 
+    # --- Web Push (VAPID) ---
+    vapid_public_key: str = ""
+    vapid_private_key_b64: str = ""  # base64 of the PKCS8 PEM private key
+    vapid_subject: str = "mailto:admin@aath.app"
+
+    @property
+    def push_enabled(self) -> bool:
+        return bool(self.vapid_public_key and self.vapid_private_key_b64)
+
     # Cost guardrail
     daily_token_budget: int = 200_000
 

@@ -8,17 +8,21 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
-    auth, chat, meetings, notifications, planning, projects, tasks, voice,
+    auth, chat, meetings, notifications, planning, projects, push, tasks, voice,
 )
 from app.core.config import settings
+from app.services.scheduler import start_scheduler, stop_scheduler
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup/shutdown hooks go here (e.g. Redis pool). Kept minimal for MVP.
-    yield
+    start_scheduler()  # background nudge generation + web push
+    try:
+        yield
+    finally:
+        stop_scheduler()
 
 
 def create_app() -> FastAPI:
@@ -42,7 +46,7 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["meta"])
     async def health() -> dict:
         # Bump `version` on meaningful changes so we can confirm what's deployed.
-        return {"status": "ok", "env": settings.env, "version": "build-9"}
+        return {"status": "ok", "env": settings.env, "version": "build-10-push"}
 
     app.include_router(auth.router)
     app.include_router(projects.router)
@@ -52,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(voice.router)
     app.include_router(notifications.router)
     app.include_router(meetings.router)
+    app.include_router(push.router)
 
     # Serve the web demo client from the same origin (no CORS needed).
     if WEB_DIR.is_dir():
