@@ -12,6 +12,9 @@ pgvector==0.3.6
 # ─── Cache / queues ────────────────────────────
 redis==5.2.1
 
+# Timezone database (Windows has no system zoneinfo) — for per-user local time
+tzdata==2024.2
+
 # ─── Config / validation ──────────────────────
 pydantic==2.10.4
 pydantic-settings==2.7.0

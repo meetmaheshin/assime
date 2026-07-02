@@ -86,6 +86,19 @@
     background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;
     font-size:14px;line-height:1.4;box-shadow:0 12px 30px rgba(0,0,0,.55)}
 
+  /* Notifications */
+  .badge{position:absolute;top:-4px;right:-4px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;
+    background:var(--danger);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface)}
+  .notif{background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
+  .notif.overdue{border-color:rgba(248,81,73,.5)}
+  .notif .n-title{font-weight:700;font-size:15px;display:flex;align-items:center;gap:7px}
+  .notif .n-body{font-size:14px;color:var(--text);margin-top:5px;line-height:1.4}
+  .notif .n-time{font-size:11px;color:var(--muted);margin-top:6px}
+  .reasons{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+  .reason{font-size:12px;padding:7px 11px;background:var(--surface);border:1px solid var(--line);border-radius:999px}
+  .reason:active{transform:scale(.96)}
+  .n-ack{margin-top:10px;font-size:13px;color:var(--good);background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.3);border-radius:10px;padding:8px 10px}
+
   /* Chat */
   #screen-chat{padding:0}
   .chatlog{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
@@ -146,9 +159,15 @@
         <div class="logo">AARTH</div>
         <div class="sub" id="appSub">Artificial Assistant &amp; Reconciliation To Human</div>
       </div>
-      <button class="iconbtn" id="logoutBtn" title="Sign out" aria-label="Sign out">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>
-      </button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="iconbtn" id="bellBtn" title="Notifications" aria-label="Notifications" style="position:relative">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <span id="bellBadge" class="badge hidden">0</span>
+        </button>
+        <button class="iconbtn" id="logoutBtn" title="Sign out" aria-label="Sign out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>
+        </button>
+      </div>
     </div>
 
     <div class="screens">
@@ -205,6 +224,15 @@
           <div class="muted" style="font-size:13px;margin-bottom:16px">Ask about anything you've told me.</div>
           <input id="memQuery" placeholder="e.g. what about the client launch?" />
           <div id="memResults" style="margin-top:14px"></div>
+        </div>
+      </section>
+
+      <!-- NOTIFICATIONS -->
+      <section class="screen" id="screen-notif">
+        <div class="pad">
+          <div class="greeting" style="font-size:20px">Follow-ups</div>
+          <div class="muted" style="font-size:13px;margin-bottom:16px">AARTH keeps you accountable — nudges, check-ins, reviews.</div>
+          <div id="notifList"><div class="muted">Nothing right now.</div></div>
         </div>
       </section>
     </div>
@@ -300,7 +328,7 @@ async function doAuth(email,pw){
 $("#authBtn").onclick=()=>doAuth($("#email").value.trim(),$("#password").value);
 $("#password").addEventListener("keydown",e=>{if(e.key==="Enter")$("#authBtn").click();});
 $("#demoBtn").onclick=()=>{mode="login";$("#email").value="demo@aath.app";$("#password").value="demo12345";doAuth("demo@aath.app","demo12345");};
-function logout(){token=null;localStorage.removeItem("aath_token");$("#app").classList.add("hidden");$("#auth").classList.remove("hidden");}
+function logout(){token=null;localStorage.removeItem("aath_token");if(notifTimer)clearInterval(notifTimer);$("#app").classList.add("hidden");$("#auth").classList.remove("hidden");}
 $("#logoutBtn").onclick=logout;
 
 /* Tabs */
@@ -318,6 +346,9 @@ document.querySelectorAll(".nav").forEach(n=>n.onclick=()=>showTab(n.dataset.tab
 async function enterApp(){
   $("#auth").classList.add("hidden"); $("#app").classList.remove("hidden");
   $("#chatlog").innerHTML=""; showTab("today"); await loadToday();
+  loadNotifications();
+  if(notifTimer) clearInterval(notifTimer);
+  notifTimer=setInterval(loadNotifications, 30000);  // proactive polling
 }
 async function loadToday(){
   try{
@@ -417,6 +448,55 @@ $("#memQuery").addEventListener("input",e=>{
     }catch(_){}
   },300);
 });
+
+/* ── Notifications / follow-ups ── */
+let notifTimer=null;
+const REASONS=[["blocked","Blocked"],["forgot","Forgot"],["too_busy","Too busy"],["waiting","Waiting on someone"],["not_important","Not important"],["other","Other"]];
+async function loadNotifications(speakTop){
+  let list=[]; try{ list=await api("/notifications"); }catch(_){ return; }
+  const pending=list.filter(n=>n.status==="pending");
+  const badge=$("#bellBadge");
+  if(pending.length){ badge.textContent=pending.length; badge.classList.remove("hidden"); }
+  else badge.classList.add("hidden");
+  renderNotif(list);
+  if(speakTop && pending.length) speak(pending[0].title+". "+pending[0].body);
+}
+function renderNotif(list){
+  const box=$("#notifList");
+  if(!list.length){ box.innerHTML='<div class="muted">Nothing right now. You’re on top of things.</div>'; return; }
+  box.innerHTML="";
+  list.forEach(n=>{
+    const el=document.createElement("div"); el.className="notif"+(n.kind==="overdue"?" overdue":"");
+    let actions="";
+    if(n.status!=="answered"){
+      if(n.kind==="overdue"){
+        actions='<div class="reasons">'+REASONS.map(r=>`<button class="reason" data-id="${n.id}" data-code="${r[0]}">${r[1]}</button>`).join("")+'</div>';
+      }else{
+        actions=`<div class="reasons"><button class="reason" data-id="${n.id}" data-dismiss="1">Got it</button></div>`;
+      }
+    }
+    el.innerHTML=`<div class="n-title">${h(n.title)}</div><div class="n-body">${h(n.body)}</div>
+      <div class="n-time">${new Date(n.created_at).toLocaleString()}</div>${actions}`;
+    box.appendChild(el);
+    el.querySelectorAll(".reason").forEach(b=>b.onclick=()=>{
+      if(b.dataset.dismiss) dismissNotif(b.dataset.id);
+      else respondReason(b.dataset.id, b.dataset.code, el);
+    });
+  });
+}
+async function respondReason(id, code, el){
+  try{
+    const res=await api(`/notifications/${id}/respond`,{method:"POST",body:{reason_code:code}});
+    const r=el.querySelector(".reasons"); if(r) r.outerHTML=`<div class="n-ack">${h(res.message)}</div>`;
+    speak(res.message);
+    setTimeout(loadNotifications, 1500);
+  }catch(e){ alert(e.message); }
+}
+async function dismissNotif(id){
+  try{ await api(`/notifications/${id}/dismiss`,{method:"POST"}); }catch(_){}
+  loadNotifications();
+}
+$("#bellBtn").onclick=()=>{ showTab("notif"); loadNotifications(true); };
 
 /* ── Voice via Cartesia: streaming TTS + MediaRecorder → STT ── */
 let mediaStream=null;

@@ -7,7 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import auth, chat, planning, projects, tasks, voice
+from app.api.routes import (
+    auth, chat, notifications, planning, projects, tasks, voice,
+)
 from app.core.config import settings
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -46,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(planning.router)
     app.include_router(voice.router)
+    app.include_router(notifications.router)
 
     # Serve the web demo client from the same origin (no CORS needed).
     if WEB_DIR.is_dir():
