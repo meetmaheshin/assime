@@ -22,6 +22,10 @@ class User(Base, UUIDMixin, TimestampMixin):
     )
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # What the user calls their assistant (defaults to the product name).
+    assistant_name: Mapped[str] = mapped_column(
+        String(60), default="AARTH", nullable=False
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # UserSettings fields (kept inline for MVP; split to its own table later)

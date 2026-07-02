@@ -27,6 +27,7 @@ class UserOut(BaseModel):
     id: uuid.UUID
     email: EmailStr
     display_name: str
+    assistant_name: str
     timezone: str
     quiet_hours_start: int
     quiet_hours_end: int
@@ -38,6 +39,7 @@ class UserOut(BaseModel):
 
 class SettingsUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
+    assistant_name: str | None = Field(default=None, min_length=1, max_length=60)
     timezone: str | None = None
     quiet_hours_start: int | None = Field(default=None, ge=0, le=23)
     quiet_hours_end: int | None = Field(default=None, ge=0, le=23)

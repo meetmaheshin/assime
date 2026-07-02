@@ -306,6 +306,7 @@
 
           <div class="stack" style="margin-top:0;gap:14px">
             <div><label class="slabel">Your name</label><input id="setName" /></div>
+            <div><label class="slabel">Assistant's name</label><input id="setAsst" placeholder="e.g. AARTH, Maya, Jarvis" /></div>
             <div><label class="slabel">Time zone</label>
               <select id="setTz">
                 <option>UTC</option><option>Asia/Kolkata</option><option>Asia/Dubai</option>
@@ -792,6 +793,7 @@ async function loadSettings(){
   let me; try{ me=await api("/auth/me"); }catch(_){ return; }
   ringEnabled = me.ring_enabled;
   $("#setName").value = me.display_name;
+  $("#setAsst").value = me.assistant_name || "AARTH";
   // ensure current tz is an option
   if(![...$("#setTz").options].some(o=>o.value===me.timezone)){
     const o=document.createElement("option"); o.textContent=me.timezone; $("#setTz").appendChild(o);
@@ -812,6 +814,7 @@ $("#saveSettings").onclick=async()=>{
   voiceOn = $("#setVoice").checked; localStorage.setItem("aath_voice", voiceOn?"on":"off");
   const body={
     display_name:$("#setName").value.trim()||undefined,
+    assistant_name:$("#setAsst").value.trim()||undefined,
     timezone:$("#setTz").value,
     morning_hour:parseInt($("#setMorning").value),
     evening_hour:parseInt($("#setEvening").value),

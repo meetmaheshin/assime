@@ -25,14 +25,15 @@ from app.services.llm import llm
 
 router = APIRouter(tags=["chat"])
 
-_SYSTEM = (
-    "You are AARTH (Artificial Assistant & Reconciliation To Human), a "
-    "professional, friendly "
-    "executive assistant. Be concise, warm, and human — 1-3 short sentences, no "
-    "bullet dumps, no jargon. Use the context below to ground your answer. If the "
-    "context doesn't cover it, say so briefly and ask one short follow-up. Never "
-    "invent facts. Never assume a task is done. Address the user by name when natural."
-)
+def _system_prompt(assistant_name: str) -> str:
+    return (
+        f"You are {assistant_name}, a professional, friendly executive assistant "
+        "(Artificial Assistant & Reconciliation To Human). Be concise, warm, and "
+        "human — 1-3 short sentences, no bullet dumps, no jargon. Use the context "
+        "below to ground your answer. If the context doesn't cover it, say so "
+        "briefly and ask one short follow-up. Never invent facts. Never assume a "
+        "task is done. Address the user by name when natural."
+    )
 
 # Only surface a memory as a "based on" reference when it's clearly relevant.
 _CITE_MIN_SIMILARITY = 0.35
@@ -75,7 +76,7 @@ async def chat(
         else:
             context = "(no relevant memories found)"
         prompt = f"Context (the user's memory):\n{context}\n\nUser: {payload.message}"
-        reply = await llm.complete(_SYSTEM, prompt, reasoning=True)
+        reply = await llm.complete(_system_prompt(user.assistant_name), prompt, reasoning=True)
 
     # Persist both turns; recent turns feed short-term context, later summarized.
     db.add_all([
