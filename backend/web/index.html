@@ -705,6 +705,9 @@ async function transcribe(blob){
   if(!res.ok) throw new Error("Couldn't transcribe");
   return ((await res.json()).text||"").trim();
 }
+// Playback rate for AARTH's voice (1.0 = normal). Slightly slower = calmer.
+const VOICE_RATE=0.9;
+function setRate(a){ try{ a.preservesPitch=true; a.mozPreservesPitch=true; a.webkitPreservesPitch=true; a.playbackRate=VOICE_RATE; }catch(_){} }
 // Streaming playback: append MP3 chunks to a MediaSource as they arrive (low latency).
 async function speak(text){
   if(!voiceOn) return;
@@ -713,19 +716,20 @@ async function speak(text){
     const res=await fetch("/voice/tts",{method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({text:clean})});
     if(!res.ok||!res.body) throw new Error("tts");
     if(window.MediaSource && MediaSource.isTypeSupported("audio/mpeg")){
-      const ms=new MediaSource(); const audio=new Audio(); audio.src=URL.createObjectURL(ms);
+      const ms=new MediaSource(); const audio=new Audio(); audio.src=URL.createObjectURL(ms); setRate(audio);
       await new Promise((r,j)=>{ms.addEventListener("sourceopen",r,{once:true});setTimeout(()=>j(new Error("mse")),2500);});
       const sb=ms.addSourceBuffer("audio/mpeg"); const reader=res.body.getReader();
-      audio.play().catch(()=>{});
+      setRate(audio); audio.play().catch(()=>{});
+      audio.addEventListener("playing",()=>setRate(audio),{once:true});
       for(;;){ const {value,done}=await reader.read(); if(done) break;
         await new Promise(r=>{sb.addEventListener("updateend",r,{once:true});sb.appendBuffer(value);}); }
       if(ms.readyState==="open"){ try{ms.endOfStream();}catch(_){} }
     }else{
-      const url=URL.createObjectURL(await res.blob()); const a=new Audio(url); a.onended=()=>URL.revokeObjectURL(url); await a.play().catch(()=>{});
+      const url=URL.createObjectURL(await res.blob()); const a=new Audio(url); setRate(a); a.onended=()=>URL.revokeObjectURL(url); await a.play().catch(()=>{});
     }
     return;
   }catch(_){}
-  if(window.speechSynthesis){ const u=new SpeechSynthesisUtterance(clean); speechSynthesis.cancel(); speechSynthesis.speak(u); }
+  if(window.speechSynthesis){ const u=new SpeechSynthesisUtterance(clean); u.rate=VOICE_RATE; speechSynthesis.cancel(); speechSynthesis.speak(u); }
 }
 
 /* Chat mic (composer) */
