@@ -47,10 +47,10 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         # Bump `version` on meaningful changes so we can confirm what's deployed.
         return {
-            "status": "ok", "env": settings.env, "version": "build-12",
+            "status": "ok", "env": settings.env, "version": "build-13",
             "llm_provider": settings.resolved_provider,
             "reasoning_model": settings.azure_deployment_reasoning,
-            "api_version": settings.azure_openai_api_version,
+            "api_mode": "v1" if settings.azure_openai_base_url else "classic",
         }
 
     app.include_router(auth.router)

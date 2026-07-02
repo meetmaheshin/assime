@@ -35,8 +35,12 @@ class Settings(BaseSettings):
     # In Azure you call *deployment* names, not model names. Chat and embeddings
     # each need their own deployment in the Azure resource.
     azure_openai_api_key: str = ""
-    azure_openai_endpoint: str = ""  # e.g. https://<resource>.openai.azure.com/
+    azure_openai_endpoint: str = ""  # classic: https://<resource>.openai.azure.com/
     azure_openai_api_version: str = "2024-10-21"
+    # New Azure AI Foundry v1 (OpenAI-compatible) base, e.g.
+    # https://<resource>.services.ai.azure.com/openai/v1 — when set, we use the
+    # standard OpenAI client (needed for gpt-5 family). Takes precedence.
+    azure_openai_base_url: str = ""
     azure_deployment_reasoning: str = ""  # e.g. gpt-4.1-nano
     azure_deployment_cheap: str = ""      # falls back to reasoning if unset
     azure_deployment_embed: str = ""      # e.g. a text-embedding-3-small deployment

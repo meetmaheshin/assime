@@ -217,7 +217,7 @@ async def run(
     for _ in range(4):  # allow a few tool round-trips
         resp = await client.chat.completions.create(
             model=model, messages=messages, tools=TOOLS,
-            tool_choice="auto", temperature=0.3)
+            tool_choice="auto")
         msg = resp.choices[0].message
         if not msg.tool_calls:
             return {"reply": (msg.content or "").strip(), "actions": actions}
@@ -244,5 +244,5 @@ async def run(
 
     # Ran out of tool rounds — ask the model to wrap up in plain text.
     resp = await client.chat.completions.create(
-        model=model, messages=messages, temperature=0.3)
+        model=model, messages=messages)
     return {"reply": (resp.choices[0].message.content or "").strip(), "actions": actions}

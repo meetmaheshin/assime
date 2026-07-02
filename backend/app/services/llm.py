@@ -91,16 +91,31 @@ def _openai_embedder(client: AsyncOpenAI, model: str) -> EmbedFn:
 
 
 # ─── Chat backends ────────────────────────────────────────────
+def _azure_client() -> AsyncOpenAI:
+    """Azure chat client. Uses the new v1 (OpenAI-compatible) base URL when set
+    — required for the gpt-5 family — else the classic Azure OpenAI client."""
+    if settings.azure_openai_base_url:
+        return AsyncOpenAI(
+            base_url=settings.azure_openai_base_url,
+            api_key=settings.azure_openai_api_key,
+        )
+    return AsyncAzureOpenAI(
+        api_key=settings.azure_openai_api_key,
+        azure_endpoint=settings.azure_openai_endpoint,
+        api_version=settings.azure_openai_api_version,
+    )
+
+
 def _openai_completer(client: AsyncOpenAI, reasoning_model: str, cheap_model: str) -> CompleteFn:
     async def _complete(system: str, user: str, *, reasoning: bool = True) -> str:
         model = reasoning_model if reasoning else cheap_model
+        # No temperature: gpt-5 reasoning models only accept the default (1).
         resp = await client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            temperature=0.3,
         )
         return (resp.choices[0].message.content or "").strip()
 
@@ -132,11 +147,7 @@ def _resolve_embed_fn() -> EmbedFn:
 def _resolve_complete_fn() -> CompleteFn:
     provider = settings.resolved_provider
     if provider == "azure":
-        client = AsyncAzureOpenAI(
-            api_key=settings.azure_openai_api_key,
-            azure_endpoint=settings.azure_openai_endpoint,
-            api_version=settings.azure_openai_api_version,
-        )
+        client = _azure_client()
         cheap = settings.azure_deployment_cheap or settings.azure_deployment_reasoning
         return _openai_completer(client, settings.azure_deployment_reasoning, cheap)
     if provider == "openai":
@@ -152,12 +163,7 @@ def build_chat_client():
     provider has no tool support (stub)."""
     provider = settings.resolved_provider
     if provider == "azure":
-        client = AsyncAzureOpenAI(
-            api_key=settings.azure_openai_api_key,
-            azure_endpoint=settings.azure_openai_endpoint,
-            api_version=settings.azure_openai_api_version,
-        )
-        return client, settings.azure_deployment_reasoning
+        return _azure_client(), settings.azure_deployment_reasoning
     if provider == "openai":
         return AsyncOpenAI(api_key=settings.openai_api_key), settings.openai_model_reasoning
     return None, None
