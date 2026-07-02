@@ -17,7 +17,13 @@ class TTSRequest(BaseModel):
 
 @router.get("/status")
 async def voice_status() -> dict:
-    return {"enabled": settings.voice_enabled, "provider": "cartesia"}
+    return {
+        "enabled": settings.voice_enabled,
+        "stt": settings.resolved_stt_provider,
+        "deepgram_key_set": bool(settings.deepgram_api_key),
+        "stt_provider_setting": settings.stt_provider,
+        "tts": "cartesia" if settings.voice_enabled else "none",
+    }
 
 
 @router.post("/tts")
