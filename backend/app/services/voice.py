@@ -85,18 +85,50 @@ async def tts_stream(text: str):
         return
 
 
-async def stt(audio: bytes, filename: str, content_type: str) -> str:
-    """Transcribe an uploaded audio clip; returns the recognized text."""
-    if not settings.voice_enabled:
-        raise VoiceError("Cartesia not configured")
+async def _deepgram_stt(audio: bytes, content_type: str) -> str:
+    """Deepgram nova-2, language=multi — strong on Hindi/Hinglish."""
+    params = {
+        "model": settings.deepgram_model,
+        "language": settings.deepgram_language,
+        "smart_format": "true",
+        "punctuate": "true",
+    }
+    headers = {
+        "Authorization": f"Token {settings.deepgram_api_key}",
+        "Content-Type": content_type or "audio/wav",
+    }
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(
+            "https://api.deepgram.com/v1/listen",
+            params=params, headers=headers, content=audio)
+    if resp.status_code != 200:
+        raise VoiceError(f"Deepgram STT failed ({resp.status_code}): {resp.text[:300]}")
+    try:
+        alt = resp.json()["results"]["channels"][0]["alternatives"][0]
+        return (alt.get("transcript") or "").strip()
+    except (KeyError, IndexError):
+        return ""
+
+
+async def _cartesia_stt(audio: bytes, filename: str, content_type: str) -> str:
     files = {"file": (filename or "clip.webm", audio, content_type or "audio/webm")}
     data = {"model": settings.cartesia_stt_model}
-    if settings.cartesia_stt_language:  # empty = auto-detect (Hindi + English)
+    if settings.cartesia_stt_language:  # empty = auto-detect
         data["language"] = settings.cartesia_stt_language
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
-            f"{_BASE}/stt", headers=_headers(), data=data, files=files
-        )
+            f"{_BASE}/stt", headers=_headers(), data=data, files=files)
     if resp.status_code != 200:
         raise VoiceError(f"STT failed ({resp.status_code}): {resp.text[:300]}")
-    return _collapse_repeats((resp.json().get("text") or "").strip())
+    return (resp.json().get("text") or "").strip()
+
+
+async def stt(audio: bytes, filename: str, content_type: str) -> str:
+    """Transcribe an uploaded audio clip; returns the recognized text."""
+    if settings.resolved_stt_provider == "deepgram":
+        text = await _deepgram_stt(audio, content_type)
+    elif settings.voice_enabled:
+        text = await _cartesia_stt(audio, filename, content_type)
+    else:
+        raise VoiceError("No STT provider configured")
+    return _collapse_repeats(text)

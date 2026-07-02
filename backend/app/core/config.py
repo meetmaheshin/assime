@@ -82,6 +82,19 @@ class Settings(BaseSettings):
     cartesia_tts_model: str = "sonic-2"
     cartesia_stt_model: str = "ink-whisper"
     cartesia_stt_language: str = ""  # "" = auto-detect (supports Hindi + English)
+
+    # --- Deepgram (STT — better Hindi/Hinglish than Whisper) ---
+    deepgram_api_key: str = ""
+    deepgram_model: str = "nova-2"
+    deepgram_language: str = "multi"  # code-switching: Hindi + English
+    # auto = Deepgram if a key is set, else Cartesia
+    stt_provider: str = "auto"
+
+    @property
+    def resolved_stt_provider(self) -> str:
+        if self.stt_provider != "auto":
+            return self.stt_provider
+        return "deepgram" if self.deepgram_api_key else "cartesia"
     # Default voice: "Priya — Trusted Operator" (Indian-accent female).
     cartesia_voice_id: str = "f6141af3-5f94-418c-80ed-a45d450e7e2e"
 
