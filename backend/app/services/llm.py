@@ -147,6 +147,22 @@ def _resolve_complete_fn() -> CompleteFn:
     return _stub_complete
 
 
+def build_chat_client():
+    """Return (async client, model) for tool-calling chat, or (None, None) if the
+    provider has no tool support (stub)."""
+    provider = settings.resolved_provider
+    if provider == "azure":
+        client = AsyncAzureOpenAI(
+            api_key=settings.azure_openai_api_key,
+            azure_endpoint=settings.azure_openai_endpoint,
+            api_version=settings.azure_openai_api_version,
+        )
+        return client, settings.azure_deployment_reasoning
+    if provider == "openai":
+        return AsyncOpenAI(api_key=settings.openai_api_key), settings.openai_model_reasoning
+    return None, None
+
+
 def build_llm_client() -> LLMClient:
     return CompositeLLM(_resolve_embed_fn(), _resolve_complete_fn())
 

@@ -8,6 +8,7 @@ hallucinate (PRD AI behaviour).
 import logging
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -22,7 +23,7 @@ from app.schemas.chat import (
     MemorySearchHit,
     MemorySearchRequest,
 )
-from app.services import memory_service
+from app.services import agent, memory_service
 from app.services.llm import llm
 
 router = APIRouter(tags=["chat"])
@@ -73,18 +74,18 @@ async def chat(
     if settings.resolved_provider == "stub":
         reply = _stub_reply(user.display_name, payload.message, hits)
     else:
-        if hits:
-            context = "\n".join(f"- ({mem.kind}) {mem.content}" for mem, _ in hits)
-        else:
-            context = "(no relevant memories found)"
-        prompt = (f"The user's name is {user.display_name}.\n"
-                  f"Context (the user's memory):\n{context}\n\nUser: {payload.message}")
+        context = ("\n".join(f"- ({mem.kind}) {mem.content}" for mem, _ in hits)
+                   if hits else "(no relevant memories found)")
+        # Recent conversation so multi-turn dialogue stays coherent.
+        history_rows = list(await db.scalars(
+            select(ConversationTurn).where(ConversationTurn.user_id == user.id)
+            .order_by(ConversationTurn.created_at.desc()).limit(10)))
+        history = [{"role": t.role, "content": t.content} for t in reversed(history_rows)]
         try:
-            reply = await llm.complete(
-                _system_prompt(user.assistant_name), prompt, reasoning=True)
+            reply = await agent.run(db, user, payload.message, history, context)
         except Exception:
             # Never 500 on an upstream AI error — degrade to a calm message.
-            logging.exception("chat LLM call failed")
+            logging.exception("chat agent failed")
             reply = ("I'm having trouble reaching my AI brain right now. "
                      "Your tasks and reminders still work — try me again in a moment.")
 
