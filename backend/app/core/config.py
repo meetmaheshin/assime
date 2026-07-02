@@ -46,7 +46,8 @@ class Settings(BaseSettings):
     #   auto  = follow the chat provider (azure/openai) if it can embed, else stub
     #   local = on-device sentence-transformers (no API cost)
     embedding_provider: str = "auto"
-    local_embed_model: str = "all-MiniLM-L6-v2"  # 384-dim
+    # fastembed (ONNX) model id; all-MiniLM-L6-v2 is 384-dim.
+    local_embed_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     # Cosine-similarity threshold for duplicate-task detection. MiniLM scores
     # paraphrases lower than OpenAI embeddings, so this is tuned for the local
@@ -93,6 +94,16 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.env == "dev"
+
+    @property
+    def async_database_url(self) -> str:
+        """Ensure the asyncpg driver is used. Managed hosts (Railway/Render)
+        hand out `postgresql://...`; SQLAlchemy async needs `postgresql+asyncpg://`."""
+        u = self.database_url
+        for prefix in ("postgresql+asyncpg://", "postgresql://", "postgres://"):
+            if u.startswith(prefix):
+                return "postgresql+asyncpg://" + u[len(prefix):]
+        return u
 
 
 @lru_cache

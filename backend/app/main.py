@@ -29,11 +29,12 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Dev CORS is open; tighten to the app's origins before production.
+    # API auth is via bearer tokens (not cookies), so a wildcard origin is safe
+    # and lets any client — the web PWA or a native mobile app — connect.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.is_dev else [],
-        allow_credentials=True,
+        allow_origins=["*"],
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )

@@ -59,24 +59,24 @@ async def _hash_embed(text: str) -> list[float]:
     return _hash_embed_sync(text)
 
 
-# Lazily-loaded local model (sentence-transformers). Loaded once, then reused.
+# Lazily-loaded local ONNX model (fastembed). Loaded once, then reused. No torch.
 _local_model = None
 
 
 def _get_local_model():
     global _local_model
     if _local_model is None:
-        from sentence_transformers import SentenceTransformer
+        from fastembed import TextEmbedding
 
-        _local_model = SentenceTransformer(settings.local_embed_model)
+        _local_model = TextEmbedding(model_name=settings.local_embed_model)
     return _local_model
 
 
 async def _local_embed(text: str) -> list[float]:
-    # sentence-transformers is synchronous + CPU-bound; run off the event loop.
+    # fastembed is synchronous + CPU-bound; run off the event loop.
     def _run() -> list[float]:
         model = _get_local_model()
-        vec = model.encode(text, normalize_embeddings=True)
+        vec = next(iter(model.embed([text])))
         return vec.tolist()
 
     return await asyncio.to_thread(_run)
