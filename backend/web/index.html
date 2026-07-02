@@ -477,7 +477,8 @@ async function enterApp(){
   $("#auth").classList.add("hidden"); $("#app").classList.remove("hidden");
   $("#chatlog").innerHTML="";
   await syncTimezone();            // fix the clock before greeting
-  await loadToday();               // populates Today + posts the greeting
+  await loadHistory();             // restore past conversation (survives refresh)
+  await loadToday();               // populates Today + posts greeting only if chat is empty
   showTab("chat");                 // chat is the home screen — a conversation first
   loadNotifications();
   if(notifTimer) clearInterval(notifTimer);
@@ -562,7 +563,7 @@ $("#dupNew").onclick=async()=>{
 };
 
 /* Chat */
-function addMsg(role,text,cites){
+function addMsg(role,text,cites,silent){
   const el=document.createElement("div"); el.className="msg "+role; el.innerHTML=h(text);
   if(role==="ai"&&cites&&cites.length){
     const c=document.createElement("div"); c.className="cites";
@@ -570,14 +571,24 @@ function addMsg(role,text,cites){
     el.appendChild(c);
   }
   $("#chatlog").appendChild(el); $("#chatlog").scrollTop=1e9;
-  if(role==="ai") speak(text);
+  if(role==="ai" && !silent) speak(text);
+}
+async function loadHistory(){
+  try{
+    const turns=await api("/chat/history");
+    if(turns && turns.length){
+      turns.forEach(t=>addMsg(t.role==="assistant"?"ai":"user", t.content, [], true));
+      return true;
+    }
+  }catch(_){}
+  return false;
 }
 async function send(){
   const msg=$("#chatInput").value.trim(); if(!msg) return;
   $("#chatInput").value=""; $("#chatInput").style.height="46px"; addMsg("user",msg,[]);
   const typing=document.createElement("div"); typing.className="msg ai"; typing.textContent="…";
   $("#chatlog").appendChild(typing); $("#chatlog").scrollTop=1e9;
-  try{const res=await api("/chat",{method:"POST",body:{message:msg}}); typing.remove(); addMsg("ai",res.reply,res.citations);}
+  try{const res=await api("/chat",{method:"POST",body:{message:msg}}); typing.remove(); addMsg("ai",res.reply,res.citations); loadToday();}
   catch(e){typing.remove(); addMsg("ai","(error: "+e.message+")",[]);}
 }
 $("#sendBtn").onclick=send;
@@ -717,8 +728,31 @@ function recStop(mr){ return new Promise(res=>{
     if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; } res(blob); };
   mr.stop();
 });}
+// Whisper expects 16 kHz mono. Browsers record webm/opus at 48 kHz — feeding
+// that raw makes Whisper loop/hallucinate. Decode + resample to 16 kHz mono WAV.
+function encodeWav16(audioBuffer){
+  const data=audioBuffer.getChannelData(0), len=data.length, rate=audioBuffer.sampleRate;
+  const buf=new ArrayBuffer(44+len*2), view=new DataView(buf);
+  const w=(o,s)=>{for(let i=0;i<s.length;i++)view.setUint8(o+i,s.charCodeAt(i));};
+  w(0,"RIFF");view.setUint32(4,36+len*2,true);w(8,"WAVE");w(12,"fmt ");
+  view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);
+  view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);
+  view.setUint16(34,16,true);w(36,"data");view.setUint32(40,len*2,true);
+  let o=44; for(let i=0;i<len;i++){ let s=Math.max(-1,Math.min(1,data[i])); view.setInt16(o,s<0?s*0x8000:s*0x7FFF,true); o+=2; }
+  return new Blob([buf],{type:"audio/wav"});
+}
+async function toWav16k(blob){
+  const ac=new (window.AudioContext||window.webkitAudioContext)();
+  const decoded=await ac.decodeAudioData(await blob.arrayBuffer());
+  const off=new OfflineAudioContext(1, Math.ceil(decoded.duration*16000), 16000);
+  const src=off.createBufferSource(); src.buffer=decoded; src.connect(off.destination); src.start();
+  const rendered=await off.startRendering(); ac.close();
+  return encodeWav16(rendered);
+}
 async function transcribe(blob){
-  const fd=new FormData(); fd.append("audio", blob, "clip.webm");
+  let payload=blob, name="clip.webm";
+  try{ payload=await toWav16k(blob); name="clip.wav"; }catch(_){}
+  const fd=new FormData(); fd.append("audio", payload, name);
   const res=await fetch("/voice/stt",{method:"POST",headers:token?{"Authorization":"Bearer "+token}:{},body:fd});
   if(!res.ok){ let d=""; try{ d=(await res.json()).detail; }catch(_){} throw new Error(d||("STT "+res.status)); }
   return ((await res.json()).text||"").trim();

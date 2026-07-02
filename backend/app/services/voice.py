@@ -6,10 +6,30 @@ audio for TTS and a transcript string for STT.
 from __future__ import annotations
 
 import logging
+import re
 
 import httpx
 
 from app.core.config import settings
+
+
+def _collapse_repeats(text: str) -> str:
+    """Whisper sometimes loops a phrase on noisy/silent audio. Drop consecutive
+    duplicate sentences, and if one sentence dominates, keep a single copy."""
+    if not text:
+        return text
+    parts = re.split(r"(?<=[.!?।])\s+", text.strip())
+    out: list[str] = []
+    for p in parts:
+        key = p.strip().lower()
+        if key and (not out or out[-1].strip().lower() != key):
+            out.append(p)
+    # Collapse phrase-level loops (no punctuation) like "hi there hi there hi there".
+    joined = " ".join(out)
+    m = re.match(r"^(.{6,60}?)(?:\s+\1){2,}\s*$", joined.strip(), re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+    return joined.strip()
 
 _BASE = "https://api.cartesia.ai"
 
@@ -79,4 +99,4 @@ async def stt(audio: bytes, filename: str, content_type: str) -> str:
         )
     if resp.status_code != 200:
         raise VoiceError(f"STT failed ({resp.status_code}): {resp.text[:300]}")
-    return (resp.json().get("text") or "").strip()
+    return _collapse_repeats((resp.json().get("text") or "").strip())

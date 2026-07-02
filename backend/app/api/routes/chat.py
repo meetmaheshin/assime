@@ -114,6 +114,18 @@ async def chat(
     return ChatResponse(reply=reply, citations=citations)
 
 
+@router.get("/chat/history")
+async def chat_history(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Recent conversation, oldest first — so the chat survives a refresh."""
+    rows = list(await db.scalars(
+        select(ConversationTurn).where(ConversationTurn.user_id == user.id)
+        .order_by(ConversationTurn.created_at.desc()).limit(50)))
+    return [{"role": t.role, "content": t.content} for t in reversed(rows)]
+
+
 @router.post("/memory/search", response_model=list[MemorySearchHit])
 async def memory_search(
     payload: MemorySearchRequest,
