@@ -2,365 +2,393 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0d1117" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
 <title>A.A.T.H</title>
 <style>
   :root{
     --bg:#0d1117; --surface:#161b22; --surface2:#1c2330; --line:#2a3441;
     --text:#e6edf3; --muted:#8b95a5; --accent:#4c8dff; --accent2:#7c5cff;
-    --good:#3fb950; --warn:#f0883e; --danger:#f85149; --radius:16px;
+    --good:#3fb950; --warn:#f0883e; --danger:#f85149; --r:16px;
+    --appw:440px; /* phone frame width on desktop */
   }
-  *{box-sizing:border-box}
-  body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
-  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;transition:.15s}
-  input,textarea,select{font-family:inherit;background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:11px 13px;font-size:14px;outline:none;width:100%}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:var(--text);
+    background:#05070c;display:flex;justify-content:center;align-items:stretch;
+  }
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:12px;transition:.15s;color:var(--text)}
+  input,textarea,select{font-family:inherit;background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:13px 14px;font-size:16px;outline:none;width:100%}
   input:focus,textarea:focus{border-color:var(--accent)}
   .hidden{display:none!important}
   .muted{color:var(--muted)}
-  .pill{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--surface2);border:1px solid var(--line)}
+  .pill{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--surface2);border:1px solid var(--line);white-space:nowrap}
+
+  /* Phone frame: full-screen on mobile, centered device on desktop */
+  .frame{
+    width:100%;max-width:var(--appw);height:100vh;height:100dvh;
+    background:var(--bg);position:relative;overflow:hidden;display:flex;flex-direction:column;
+  }
+  @media(min-width:520px){
+    body{padding:20px 0}
+    .frame{height:calc(100vh - 40px);border-radius:28px;border:1px solid var(--line);
+      box-shadow:0 30px 80px rgba(0,0,0,.6)}
+  }
 
   /* ── Auth ── */
-  #auth{height:100vh;display:flex;align-items:center;justify-content:center;background:
-    radial-gradient(1200px 600px at 70% -10%, rgba(124,92,255,.18), transparent),
-    radial-gradient(900px 500px at 10% 110%, rgba(76,141,255,.15), transparent), var(--bg)}
-  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:34px;width:380px;box-shadow:0 24px 60px rgba(0,0,0,.5)}
-  .logo{font-size:30px;font-weight:800;letter-spacing:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .stack{display:flex;flex-direction:column;gap:12px;margin-top:20px}
-  .btn-primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;padding:12px;font-weight:600;font-size:15px}
-  .btn-primary:hover{filter:brightness(1.08)}
-  .link{color:var(--accent);background:none;font-size:13px;padding:4px}
-  .err{color:var(--danger);font-size:13px;min-height:16px}
+  #auth{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;justify-content:center;padding:28px;
+    background:radial-gradient(700px 400px at 70% 0%,rgba(124,92,255,.20),transparent),
+    radial-gradient(600px 400px at 0% 100%,rgba(76,141,255,.16),transparent),var(--bg)}
+  .logo{font-size:32px;font-weight:800;letter-spacing:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .stack{display:flex;flex-direction:column;gap:12px;margin-top:22px}
+  .btn-primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;padding:14px;font-weight:600;font-size:16px}
+  .btn-primary:active{transform:scale(.98)}
+  .link{color:var(--accent);background:none;font-size:14px;padding:8px}
+  .err{color:var(--danger);font-size:14px;min-height:18px;line-height:1.35}
 
-  /* ── App layout ── */
-  #app{display:grid;grid-template-columns:340px 1fr;height:100vh}
-  aside{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow-y:auto}
-  .brandbar{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
-  .section{padding:16px 20px;border-bottom:1px solid var(--line)}
-  .section h3{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
-  .greeting{font-size:18px;font-weight:700;margin-bottom:4px}
-  .task{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
-  .task .t-title{font-weight:600;font-size:14px}
-  .task .t-meta{font-size:12px;color:var(--muted);margin-top:3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .task .t-actions{margin-top:8px;display:flex;gap:6px}
-  .btn-sm{font-size:12px;padding:5px 9px;background:var(--surface);border:1px solid var(--line);color:var(--text)}
-  .btn-sm:hover{border-color:var(--accent)}
+  /* ── App shell ── */
+  #app{flex:1;display:flex;flex-direction:column;min-height:0}
+  .appbar{padding:calc(14px + env(safe-area-inset-top)) 18px 14px;display:flex;align-items:center;justify-content:space-between;
+    background:var(--surface);border-bottom:1px solid var(--line)}
+  .appbar .logo{font-size:20px}
+  .appbar .sub{font-size:12px;color:var(--muted);margin-top:1px}
+  .iconbtn{width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--line);font-size:16px;border-radius:10px}
+
+  .screens{flex:1;position:relative;min-height:0}
+  .screen{position:absolute;inset:0;display:none;flex-direction:column;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .screen.active{display:flex}
+  .pad{padding:18px}
+  .h{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 12px}
+  .greeting{font-size:24px;font-weight:800;margin:2px 0 4px}
+
+  .task{background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
+  .task .t-title{font-weight:600;font-size:16px}
+  .task .t-meta{font-size:13px;color:var(--muted);margin-top:5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .task .t-actions{margin-top:10px}
+  .btn-sm{font-size:13px;padding:8px 12px;background:var(--surface);border:1px solid var(--line)}
+  .btn-sm:active{transform:scale(.97)}
   .btn-done{border-color:var(--good);color:var(--good)}
-  .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
-  .p1{background:var(--danger)} .p2{background:var(--warn)} .p3{background:var(--accent)} .p4,.p5{background:var(--muted)}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .p1{background:var(--danger)}.p2{background:var(--warn)}.p3{background:var(--accent)}.p4,.p5{background:var(--muted)}
+  .banner{background:linear-gradient(90deg,rgba(240,136,62,.15),transparent);border:1px solid rgba(240,136,62,.4);border-radius:12px;padding:10px 12px;font-size:13px;margin-bottom:14px}
 
-  main{display:flex;flex-direction:column;height:100vh;min-width:0}
-  .chatlog{flex:1;overflow-y:auto;padding:24px 22px;display:flex;flex-direction:column;gap:14px}
-  .msg{max-width:76%;padding:12px 15px;border-radius:16px;line-height:1.45;font-size:14.5px;white-space:pre-wrap;word-wrap:break-word}
-  .msg.user{align-self:flex-end;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;border-bottom-right-radius:4px}
-  .msg.ai{align-self:flex-start;background:var(--surface2);border:1px solid var(--line);border-bottom-left-radius:4px}
-  .cites{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);font-size:11.5px;color:var(--muted)}
-  .cite{margin-top:3px}
-  .composer{border-top:1px solid var(--line);padding:14px 18px;display:flex;gap:10px;align-items:flex-end;background:var(--surface)}
-  .composer textarea{resize:none;height:46px;max-height:140px}
-  .icon-btn{width:46px;height:46px;flex:0 0 46px;display:flex;align-items:center;justify-content:center;font-size:18px;background:var(--surface2);border:1px solid var(--line);color:var(--text)}
-  .icon-btn:hover{border-color:var(--accent)}
-  .icon-btn.send{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;border:none}
-  .icon-btn.rec{background:var(--danger);color:#fff;border:none;animation:pulse 1.2s infinite}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
-  .tabs{display:flex;gap:6px}
-  .tab{font-size:12px;padding:6px 10px;background:var(--surface2);border:1px solid var(--line);color:var(--muted)}
-  .tab.active{color:var(--text);border-color:var(--accent)}
+  /* Chat */
+  #screen-chat{padding:0}
+  .chatlog{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
+  .msg{max-width:82%;padding:12px 15px;border-radius:18px;line-height:1.45;font-size:15px;white-space:pre-wrap;word-wrap:break-word}
+  .msg.user{align-self:flex-end;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;border-bottom-right-radius:5px}
+  .msg.ai{align-self:flex-start;background:var(--surface2);border:1px solid var(--line);border-bottom-left-radius:5px}
+  .cites{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);font-size:12px;color:var(--muted)}
+  .composer{border-top:1px solid var(--line);padding:12px;display:flex;gap:8px;align-items:flex-end;background:var(--surface)}
+  .composer textarea{resize:none;height:48px;max-height:120px;border-radius:22px}
+  .cbtn{width:48px;height:48px;flex:0 0 48px;display:flex;align-items:center;justify-content:center;font-size:19px;background:var(--surface2);border:1px solid var(--line);border-radius:50%}
+  .cbtn.send{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;border:none}
+  .cbtn.rec{background:var(--danger);color:#fff;border:none;animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 
-  /* ── Modal (duplicate detection) ── */
-  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:50}
-  .modal{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:24px;width:440px}
-  .dupitem{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;font-size:13px}
+  .result{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:8px;font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+
+  /* Bottom nav */
+  .bottomnav{display:flex;background:var(--surface);border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom)}
+  .nav{flex:1;background:none;border:none;padding:10px 0 12px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);font-size:11px}
+  .nav .ico{font-size:21px;line-height:1}
+  .nav.active{color:var(--accent)}
+  .fab{position:relative}
+
+  /* Modal */
+  .overlay{position:absolute;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:flex-end;justify-content:center;z-index:40}
+  .modal{background:var(--surface);border:1px solid var(--line);border-radius:22px 22px 0 0;padding:22px;width:100%}
+  @media(min-width:520px){.overlay{align-items:center}.modal{border-radius:22px;max-width:400px}}
+  .dupitem{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:11px;margin:8px 0;font-size:14px}
 </style>
 </head>
 <body>
+<div class="frame">
 
-<!-- AUTH -->
-<div id="auth">
-  <div class="card">
+  <!-- AUTH -->
+  <div id="auth">
     <div class="logo">A.A.T.H</div>
-    <div class="muted" style="margin-top:6px;font-size:13px">Artificial Assistant To Human</div>
+    <div class="muted" style="margin-top:6px;font-size:14px">Artificial Assistant To Human</div>
     <div class="stack">
       <input id="dnameRow" class="hidden" placeholder="Your name" />
-      <input id="email" placeholder="Email" type="email" />
-      <input id="password" placeholder="Password (min 8 chars)" type="password" />
+      <input id="email" placeholder="Email" type="email" autocomplete="email" />
+      <input id="password" placeholder="Password (min 8 chars)" type="password" autocomplete="current-password" />
       <div class="err" id="authErr"></div>
       <button class="btn-primary" id="authBtn">Sign in</button>
       <button class="link" id="demoBtn">✨ Try the demo account</button>
       <button class="link" id="authToggle">New here? Create an account</button>
     </div>
   </div>
-</div>
 
-<!-- APP -->
-<div id="app" class="hidden">
-  <aside>
-    <div class="brandbar">
-      <span class="logo" style="font-size:20px">A.A.T.H</span>
-      <button class="btn-sm" id="logoutBtn">Sign out</button>
-    </div>
-
-    <div class="section">
-      <div class="greeting" id="greeting">Good day.</div>
-      <div class="muted" id="briefSub" style="font-size:13px">Loading your day…</div>
-    </div>
-
-    <div class="section">
-      <h3>Today's priorities</h3>
-      <div id="priorities"><div class="muted" style="font-size:13px">Nothing yet.</div></div>
-    </div>
-
-    <div class="section" style="flex:1">
-      <h3>Add a task</h3>
-      <div class="stack" style="margin-top:0;gap:8px">
-        <input id="ntTitle" placeholder="What needs doing?" />
-        <input id="ntReason" placeholder="Why does it matter? (the 'why')" />
-        <div style="display:flex;gap:8px">
-          <select id="ntPriority" style="flex:1">
-            <option value="1">P1 · Critical</option>
-            <option value="2">P2 · High</option>
-            <option value="3" selected>P3 · Normal</option>
-            <option value="4">P4 · Low</option>
-          </select>
-          <input id="ntDeadline" type="date" style="flex:1" />
-        </div>
-        <button class="btn-primary" id="addTaskBtn" style="padding:10px">Add task</button>
-      </div>
-    </div>
-
-    <div class="section">
-      <h3>Memory search</h3>
-      <input id="memQuery" placeholder="e.g. what about the client launch?" />
-      <div id="memResults" style="margin-top:8px"></div>
-    </div>
-  </aside>
-
-  <main>
-    <div class="brandbar">
+  <!-- APP -->
+  <div id="app" class="hidden">
+    <div class="appbar">
       <div>
-        <div style="font-weight:700">Chat with A.A.T.H</div>
-        <div class="muted" id="providerNote" style="font-size:12px"></div>
+        <div class="logo">A.A.T.H</div>
+        <div class="sub" id="appSub">Artificial Assistant To Human</div>
       </div>
-      <div class="tabs">
-        <button class="tab active" id="ttsTab">🔊 Voice replies: on</button>
-      </div>
+      <button class="iconbtn" id="logoutBtn" title="Sign out">⏻</button>
     </div>
 
-    <div class="chatlog" id="chatlog"></div>
+    <div class="screens">
+      <!-- TODAY -->
+      <section class="screen active" id="screen-today">
+        <div class="pad">
+          <div class="greeting" id="greeting">Good day.</div>
+          <div class="muted" id="briefSub" style="font-size:14px;margin-bottom:16px">Loading…</div>
+          <div id="overdueBanner"></div>
+          <div class="h">Today's priorities</div>
+          <div id="priorities"><div class="muted">Nothing yet.</div></div>
+        </div>
+      </section>
 
-    <div class="composer">
-      <button class="icon-btn" id="micBtn" title="Speak">🎙️</button>
-      <textarea id="chatInput" placeholder="Ask A.A.T.H, or say what you need to do…"></textarea>
-      <button class="icon-btn send" id="sendBtn" title="Send">➤</button>
+      <!-- CHAT -->
+      <section class="screen" id="screen-chat">
+        <div class="chatlog" id="chatlog"></div>
+        <div class="composer">
+          <button class="cbtn" id="micBtn" title="Speak">🎙️</button>
+          <textarea id="chatInput" placeholder="Ask A.A.T.H…"></textarea>
+          <button class="cbtn send" id="sendBtn" title="Send">➤</button>
+        </div>
+      </section>
+
+      <!-- ADD -->
+      <section class="screen" id="screen-add">
+        <div class="pad">
+          <div class="greeting" style="font-size:20px">Add a task</div>
+          <div class="muted" style="font-size:13px;margin-bottom:16px">Tell me what and why — I'll keep you accountable.</div>
+          <div class="stack" style="margin-top:0;gap:12px">
+            <input id="ntTitle" placeholder="What needs doing?" />
+            <input id="ntReason" placeholder="Why does it matter? (the 'why')" />
+            <select id="ntPriority">
+              <option value="1">P1 · Critical</option>
+              <option value="2">P2 · High</option>
+              <option value="3" selected>P3 · Normal</option>
+              <option value="4">P4 · Low</option>
+            </select>
+            <input id="ntDeadline" type="date" />
+            <button class="btn-primary" id="addTaskBtn">Add task</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- MEMORY -->
+      <section class="screen" id="screen-memory">
+        <div class="pad">
+          <div class="greeting" style="font-size:20px">Memory</div>
+          <div class="muted" style="font-size:13px;margin-bottom:16px">Ask about anything you've told me.</div>
+          <input id="memQuery" placeholder="e.g. what about the client launch?" />
+          <div id="memResults" style="margin-top:14px"></div>
+        </div>
+      </section>
     </div>
-  </main>
-</div>
 
-<!-- DUPLICATE MODAL -->
-<div id="dupOverlay" class="overlay hidden">
-  <div class="modal">
-    <h3 style="margin-top:0">I found similar work</h3>
-    <div class="muted" style="font-size:13px">Before I duplicate anything — is this the same, new, or a follow-up?</div>
-    <div id="dupList"></div>
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn-sm" id="dupNew" style="flex:1">It's new — create it</button>
-      <button class="btn-sm" id="dupCancel" style="flex:1">Cancel</button>
+    <nav class="bottomnav">
+      <button class="nav active" data-tab="today"><span class="ico">🏠</span>Today</button>
+      <button class="nav" data-tab="chat"><span class="ico">💬</span>Chat</button>
+      <button class="nav" data-tab="add"><span class="ico">➕</span>Add</button>
+      <button class="nav" data-tab="memory"><span class="ico">🧠</span>Memory</button>
+    </nav>
+
+    <!-- DUP MODAL -->
+    <div id="dupOverlay" class="overlay hidden">
+      <div class="modal">
+        <div style="font-size:18px;font-weight:700">I found similar work</div>
+        <div class="muted" style="font-size:14px;margin-top:4px">Same, new, or a follow-up? I won't duplicate blindly.</div>
+        <div id="dupList" style="margin-top:12px"></div>
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button class="btn-primary" id="dupNew" style="flex:1">It's new</button>
+          <button class="btn-sm" id="dupCancel" style="flex:1">Cancel</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
 <script>
-const API = ""; // same origin
-let token = localStorage.getItem("aath_token") || null;
-let mode = "login";
-let pendingTask = null;
-let ttsOn = true;
+const API="";
+let token=localStorage.getItem("aath_token")||null;
+let mode="login", pendingTask=null, ttsOn=true;
+const $=s=>document.querySelector(s);
+const h=t=>{const d=document.createElement("div");d.textContent=t;return d.innerHTML;};
 
-const $ = s => document.querySelector(s);
-const h = (t)=>{const d=document.createElement("div");d.textContent=t;return d.innerHTML;};
-
-// Turn a FastAPI error `detail` (string, or list of Pydantic validation
-// errors) into one friendly sentence.
-function humanizeDetail(detail, fallback){
-  if(!detail) return fallback || "Something went wrong.";
-  if(typeof detail === "string") return detail;
+function humanizeDetail(detail,fallback){
+  if(!detail) return fallback||"Something went wrong.";
+  if(typeof detail==="string") return detail;
   if(Array.isArray(detail)){
-    const msgs = detail.map(e=>{
-      let m = (e.msg||"Invalid value").replace(/^Value error,\s*/i,"");
-      const field = Array.isArray(e.loc) ? e.loc[e.loc.length-1] : null;
-      if(field && field!=="body"){
-        const label = String(field).replace(/_/g," ");
-        m = m.charAt(0).toUpperCase()+m.slice(1);
-        return `${label.charAt(0).toUpperCase()+label.slice(1)}: ${m}`;
-      }
-      return m.charAt(0).toUpperCase()+m.slice(1);
+    const msgs=detail.map(e=>{
+      let m=(e.msg||"Invalid value").replace(/^Value error,\s*/i,"");
+      const field=Array.isArray(e.loc)?e.loc[e.loc.length-1]:null;
+      m=m.charAt(0).toUpperCase()+m.slice(1);
+      if(field&&field!=="body"){const l=String(field).replace(/_/g," ");return l.charAt(0).toUpperCase()+l.slice(1)+": "+m;}
+      return m;
     });
     return [...new Set(msgs)].join(". ");
   }
-  return fallback || "Something went wrong.";
+  return fallback||"Something went wrong.";
 }
-
-async function api(path, {method="GET", body=null, auth=true}={}){
-  const headers = {};
-  if(body) headers["Content-Type"]="application/json";
-  if(auth && token) headers["Authorization"]="Bearer "+token;
+async function api(path,{method="GET",body=null,auth=true}={}){
+  const headers={}; if(body)headers["Content-Type"]="application/json";
+  if(auth&&token)headers["Authorization"]="Bearer "+token;
   let res;
-  try{
-    res = await fetch(API+path,{method,headers,body:body?JSON.stringify(body):null});
-  }catch(_){ throw new Error("Can't reach the server. Is it running?"); }
-  if(res.status===401){ if(token) logout(); throw new Error("Invalid email or password."); }
-  const txt = await res.text();
-  const data = txt ? JSON.parse(txt) : null;
-  if(!res.ok) throw new Error(humanizeDetail(data?.detail, res.statusText));
+  try{res=await fetch(API+path,{method,headers,body:body?JSON.stringify(body):null});}
+  catch(_){throw new Error("Can't reach the server. Is it running?");}
+  if(res.status===401){if(token)logout();throw new Error("Invalid email or password.");}
+  const txt=await res.text(); const data=txt?JSON.parse(txt):null;
+  if(!res.ok) throw new Error(humanizeDetail(data?.detail,res.statusText));
   return data;
 }
 
-/* ── Auth ── */
-$("#authToggle").onclick = ()=>{
-  mode = mode==="login" ? "register" : "login";
-  $("#dnameRow").classList.toggle("hidden", mode==="login");
-  $("#authBtn").textContent = mode==="login" ? "Sign in" : "Create account";
-  $("#authToggle").textContent = mode==="login" ? "New here? Create an account" : "Have an account? Sign in";
+/* Auth */
+$("#authToggle").onclick=()=>{
+  mode=mode==="login"?"register":"login";
+  $("#dnameRow").classList.toggle("hidden",mode==="login");
+  $("#authBtn").textContent=mode==="login"?"Sign in":"Create account";
+  $("#authToggle").textContent=mode==="login"?"New here? Create an account":"Have an account? Sign in";
   $("#authErr").textContent="";
 };
-function validAuth(email, password){
+function validAuth(email,pw){
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Please enter a valid email address.";
-  if(password.length < 8) return "Password must be at least 8 characters.";
-  if(mode==="register" && !$("#dnameRow").value.trim()) return "Please tell me your name.";
+  if(pw.length<8) return "Password must be at least 8 characters.";
+  if(mode==="register"&&!$("#dnameRow").value.trim()) return "Please tell me your name.";
   return null;
 }
-async function doAuth(email, password){
+async function doAuth(email,pw){
   $("#authErr").textContent="";
-  const problem = validAuth(email, password);
-  if(problem){ $("#authErr").textContent = problem; return; }
-  const btn=$("#authBtn"); const label=btn.textContent; btn.disabled=true; btn.textContent="…";
+  const problem=validAuth(email,pw); if(problem){$("#authErr").textContent=problem;return;}
+  const b=$("#authBtn"),label=b.textContent; b.disabled=true; b.textContent="…";
   try{
-    const path = mode==="register" ? "/auth/register" : "/auth/login";
-    const body = mode==="register"
-      ? {email,password,display_name:$("#dnameRow").value.trim()}
-      : {email,password};
-    const res = await api(path,{method:"POST",auth:false,body});
-    token = res.access_token; localStorage.setItem("aath_token",token);
-    enterApp();
-  }catch(e){ $("#authErr").textContent = e.message; }
-  finally{ btn.disabled=false; btn.textContent=label; }
+    const path=mode==="register"?"/auth/register":"/auth/login";
+    const body=mode==="register"?{email,password:pw,display_name:$("#dnameRow").value.trim()}:{email,password:pw};
+    const res=await api(path,{method:"POST",auth:false,body});
+    token=res.access_token; localStorage.setItem("aath_token",token); enterApp();
+  }catch(e){$("#authErr").textContent=e.message;}
+  finally{b.disabled=false;b.textContent=label;}
 }
-$("#authBtn").onclick = ()=>doAuth($("#email").value.trim(), $("#password").value);
-$("#password").addEventListener("keydown",e=>{ if(e.key==="Enter") $("#authBtn").click(); });
-$("#demoBtn").onclick = ()=>{ mode="login"; $("#email").value="demo@aath.app"; $("#password").value="demo12345"; doAuth("demo@aath.app","demo12345"); };
+$("#authBtn").onclick=()=>doAuth($("#email").value.trim(),$("#password").value);
+$("#password").addEventListener("keydown",e=>{if(e.key==="Enter")$("#authBtn").click();});
+$("#demoBtn").onclick=()=>{mode="login";$("#email").value="demo@aath.app";$("#password").value="demo12345";doAuth("demo@aath.app","demo12345");};
+function logout(){token=null;localStorage.removeItem("aath_token");$("#app").classList.add("hidden");$("#auth").classList.remove("hidden");}
+$("#logoutBtn").onclick=logout;
 
-function logout(){ token=null; localStorage.removeItem("aath_token"); $("#app").classList.add("hidden"); $("#auth").classList.remove("hidden"); }
-$("#logoutBtn").onclick = logout;
+/* Tabs */
+function showTab(name){
+  document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("active",s.id==="screen-"+name));
+  document.querySelectorAll(".nav").forEach(n=>n.classList.toggle("active",n.dataset.tab===name));
+  if(name==="memory") $("#memQuery").focus();
+}
+document.querySelectorAll(".nav").forEach(n=>n.onclick=()=>showTab(n.dataset.tab));
 
-/* ── App ── */
+/* App */
 async function enterApp(){
   $("#auth").classList.add("hidden"); $("#app").classList.remove("hidden");
-  $("#chatlog").innerHTML="";
-  await loadToday();
+  $("#chatlog").innerHTML=""; showTab("today"); await loadToday();
 }
-
 async function loadToday(){
   try{
-    const t = await api("/today");
-    $("#greeting").textContent = t.greeting;
+    const t=await api("/today");
+    $("#greeting").textContent=t.greeting;
     const bits=[];
     if(t.open_count) bits.push(`${t.open_count} open task${t.open_count>1?"s":""}`);
     if(t.overdue.length) bits.push(`${t.overdue.length} overdue`);
-    $("#briefSub").textContent = bits.length? bits.join(" · ") : "You're all clear. Nice.";
+    $("#briefSub").textContent=bits.length?bits.join(" · "):"You're all clear. Nice.";
+    $("#overdueBanner").innerHTML = t.overdue.length
+      ? `<div class="banner">⚠️ <b>${h(t.overdue[0].title)}</b> is overdue. What happened?</div>` : "";
     renderPriorities(t.priorities);
     if(!$("#chatlog").children.length){
-      let intro = t.greeting + (t.priorities.length ? " Your top priority is “"+t.priorities[0].title+"”. Want to start there?" : " What would you like to get done today?");
-      addMsg("ai", intro, []);
+      addMsg("ai", t.greeting+(t.priorities.length?` Your top priority is “${t.priorities[0].title}”. Want to start there?`:" What would you like to get done today?"),[]);
     }
-  }catch(e){ console.error(e); }
+  }catch(e){console.error(e);}
 }
-
 function renderPriorities(list){
   const box=$("#priorities");
-  if(!list.length){ box.innerHTML='<div class="muted" style="font-size:13px">Nothing yet.</div>'; return; }
+  if(!list.length){box.innerHTML='<div class="muted">Nothing yet — add a task.</div>';return;}
   box.innerHTML="";
   list.forEach(t=>{
     const el=document.createElement("div"); el.className="task";
     el.innerHTML=`<div class="t-title">${h(t.title)}</div>
       <div class="t-meta"><span class="dot p${t.priority}"></span>P${t.priority}
-      ${t.reason?`· <span title="why">🎯 ${h(t.reason)}</span>`:""}
-      ${t.deadline?`· 📅 ${t.deadline.slice(0,10)}`:""}</div>
-      <div class="t-actions"><button class="btn-sm btn-done" data-id="${t.id}">✓ Done</button></div>`;
-    el.querySelector("button").onclick = async (ev)=>{ await api(`/tasks/${ev.target.dataset.id}/complete`,{method:"POST"}); loadToday(); };
+      ${t.reason?`· 🎯 ${h(t.reason)}`:""}${t.deadline?`· 📅 ${t.deadline.slice(0,10)}`:""}</div>
+      <div class="t-actions"><button class="btn-sm btn-done" data-id="${t.id}">✓ Mark done</button></div>`;
+    el.querySelector("button").onclick=async ev=>{await api(`/tasks/${ev.target.dataset.id}/complete`,{method:"POST"});loadToday();};
     box.appendChild(el);
   });
 }
 
-/* ── Tasks ── */
-$("#addTaskBtn").onclick = ()=>createTask(false);
+/* Tasks */
+$("#addTaskBtn").onclick=()=>createTask(false);
 async function createTask(skip){
   const title=$("#ntTitle").value.trim(); if(!title) return;
-  const body={title, reason:$("#ntReason").value.trim()||null, priority:parseInt($("#ntPriority").value), skip_duplicate_check:skip};
+  const body={title,reason:$("#ntReason").value.trim()||null,priority:parseInt($("#ntPriority").value),skip_duplicate_check:skip};
   const d=$("#ntDeadline").value; if(d) body.deadline=new Date(d).toISOString();
-  const res = await api("/tasks",{method:"POST",body});
-  if(res.task===null && res.possible_duplicates.length){ showDup(res.possible_duplicates, body); return; }
-  $("#ntTitle").value=""; $("#ntReason").value=""; $("#ntDeadline").value="";
-  addMsg("ai", `Added “${title}”. I'll keep you accountable.`, []);
-  loadToday();
+  try{
+    const res=await api("/tasks",{method:"POST",body});
+    if(res.task===null&&res.possible_duplicates.length){showDup(res.possible_duplicates,body);return;}
+    $("#ntTitle").value="";$("#ntReason").value="";$("#ntDeadline").value="";
+    addMsg("ai",`Added “${title}”. I'll keep you accountable.`,[]);
+    await loadToday(); showTab("today");
+  }catch(e){alert(e.message);}
 }
-function showDup(dupes, body){
-  pendingTask = body;
-  $("#dupList").innerHTML = dupes.map(d=>`<div class="dupitem"><b>${h(d.title)}</b> <span class="pill">${Math.round(d.similarity*100)}% match</span> <span class="muted">· ${d.status}</span></div>`).join("");
+function showDup(dupes,body){
+  pendingTask=body;
+  $("#dupList").innerHTML=dupes.map(d=>`<div class="dupitem"><b>${h(d.title)}</b> <span class="pill">${Math.round(d.similarity*100)}% match</span> <span class="muted">· ${d.status}</span></div>`).join("");
   $("#dupOverlay").classList.remove("hidden");
 }
-$("#dupCancel").onclick = ()=>{ $("#dupOverlay").classList.add("hidden"); pendingTask=null; };
-$("#dupNew").onclick = async ()=>{ $("#dupOverlay").classList.add("hidden"); if(pendingTask){ pendingTask.skip_duplicate_check=true; const b=pendingTask; pendingTask=null; const res=await api("/tasks",{method:"POST",body:b}); addMsg("ai",`Created “${b.title}” as a new task.`,[]); $("#ntTitle").value="";$("#ntReason").value=""; loadToday(); } };
+$("#dupCancel").onclick=()=>{$("#dupOverlay").classList.add("hidden");pendingTask=null;};
+$("#dupNew").onclick=async()=>{
+  $("#dupOverlay").classList.add("hidden");
+  if(pendingTask){pendingTask.skip_duplicate_check=true;const b=pendingTask;pendingTask=null;
+    await api("/tasks",{method:"POST",body:b});$("#ntTitle").value="";$("#ntReason").value="";
+    addMsg("ai",`Created “${b.title}” as a new task.`,[]);await loadToday();showTab("today");}
+};
 
-/* ── Chat ── */
-function addMsg(role, text, cites){
-  const el=document.createElement("div"); el.className="msg "+role;
-  el.innerHTML=h(text);
-  if(role==="ai" && cites && cites.length){
+/* Chat */
+function addMsg(role,text,cites){
+  const el=document.createElement("div"); el.className="msg "+role; el.innerHTML=h(text);
+  if(role==="ai"&&cites&&cites.length){
     const c=document.createElement("div"); c.className="cites";
-    c.innerHTML="grounded in your memory:"+cites.map(x=>`<div class="cite">• (${x.kind}) ${h(x.content)} <span class="pill">${Math.round(x.similarity*100)}%</span></div>`).join("");
+    c.innerHTML="grounded in your memory:"+cites.map(x=>`<div>• (${x.kind}) ${h(x.content)} <span class="pill">${Math.round(x.similarity*100)}%</span></div>`).join("");
     el.appendChild(c);
   }
   $("#chatlog").appendChild(el); $("#chatlog").scrollTop=1e9;
-  if(role==="ai" && ttsOn) speak(text);
+  if(role==="ai"&&ttsOn) speak(text);
 }
 async function send(){
   const msg=$("#chatInput").value.trim(); if(!msg) return;
   $("#chatInput").value=""; addMsg("user",msg,[]);
-  const typing=document.createElement("div"); typing.className="msg ai"; typing.textContent="…"; $("#chatlog").appendChild(typing); $("#chatlog").scrollTop=1e9;
-  try{
-    const res=await api("/chat",{method:"POST",body:{message:msg}});
-    typing.remove(); addMsg("ai",res.reply,res.citations);
-  }catch(e){ typing.remove(); addMsg("ai","(error: "+e.message+")",[]); }
+  const typing=document.createElement("div"); typing.className="msg ai"; typing.textContent="…";
+  $("#chatlog").appendChild(typing); $("#chatlog").scrollTop=1e9;
+  try{const res=await api("/chat",{method:"POST",body:{message:msg}}); typing.remove(); addMsg("ai",res.reply,res.citations);}
+  catch(e){typing.remove(); addMsg("ai","(error: "+e.message+")",[]);}
 }
 $("#sendBtn").onclick=send;
-$("#chatInput").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();} });
+$("#chatInput").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}});
 
-/* ── Memory search ── */
+/* Memory */
 let memTimer;
 $("#memQuery").addEventListener("input",e=>{
   clearTimeout(memTimer); const q=e.target.value.trim();
-  if(!q){ $("#memResults").innerHTML=""; return; }
-  memTimer=setTimeout(async ()=>{
-    try{ const r=await api("/memory/search",{method:"POST",body:{query:q,limit:5}});
-      $("#memResults").innerHTML = r.length? r.map(m=>`<div class="dupitem">${h(m.content)} <span class="pill">${Math.round(m.similarity*100)}%</span></div>`).join("") : '<div class="muted" style="font-size:13px">No memories yet.</div>';
-    }catch(e){}
+  if(!q){$("#memResults").innerHTML="";return;}
+  memTimer=setTimeout(async()=>{
+    try{const r=await api("/memory/search",{method:"POST",body:{query:q,limit:6}});
+      $("#memResults").innerHTML=r.length?r.map(m=>`<div class="result"><span>${h(m.content)}</span><span class="pill">${Math.round(m.similarity*100)}%</span></div>`).join(""):'<div class="muted">No memories yet.</div>';
+    }catch(_){}
   },300);
 });
 
-/* ── Voice (Web Speech API) ── */
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec=null;
-if(SR){
-  rec=new SR(); rec.lang="en-US"; rec.interimResults=false;
-  rec.onresult=e=>{ $("#chatInput").value=e.results[0][0].transcript; send(); };
+/* Voice */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition; let rec=null;
+if(SR){rec=new SR();rec.lang="en-US";rec.interimResults=false;
+  rec.onresult=e=>{$("#chatInput").value=e.results[0][0].transcript;send();};
   rec.onend=()=>$("#micBtn").classList.remove("rec");
-  $("#micBtn").onclick=()=>{ try{ rec.start(); $("#micBtn").classList.add("rec"); }catch(_){}} ;
-}else{ $("#micBtn").title="Voice input not supported in this browser"; $("#micBtn").style.opacity=.4; }
+  $("#micBtn").onclick=()=>{try{rec.start();$("#micBtn").classList.add("rec");}catch(_){}}
+}else{$("#micBtn").style.opacity=.4;$("#micBtn").title="Voice not supported here";}
+function speak(t){if(!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(t.replace(/\[.*?\]/g,""));u.rate=1.05;speechSynthesis.cancel();speechSynthesis.speak(u);}
 
-function speak(t){ if(!window.speechSynthesis) return; const u=new SpeechSynthesisUtterance(t.replace(/\[.*?\]/g,"")); u.rate=1.05; speechSynthesis.cancel(); speechSynthesis.speak(u); }
-$("#ttsTab").onclick=()=>{ ttsOn=!ttsOn; $("#ttsTab").textContent=`🔊 Voice replies: ${ttsOn?"on":"off"}`; $("#ttsTab").classList.toggle("active",ttsOn); if(!ttsOn) speechSynthesis.cancel(); };
-
-/* ── boot ── */
-if(token){ enterApp().catch(logout); }
+if(token){enterApp().catch(logout);}
 </script>
 </body>
 </html>
