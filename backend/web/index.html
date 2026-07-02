@@ -582,6 +582,7 @@ $("#memQuery").addEventListener("input",e=>{
 /* ── Notifications / follow-ups ── */
 let notifTimer=null;
 const shownCalls=new Set();
+const shownChat=new Set();
 const REASONS=[["blocked","Blocked"],["forgot","Forgot"],["too_busy","Too busy"],["waiting","Waiting on someone"],["not_important","Not important"],["other","Other"]];
 async function loadNotifications(speakTop){
   let list=[]; try{ list=await api("/notifications"); }catch(_){ return; }
@@ -593,6 +594,14 @@ async function loadNotifications(speakTop){
   // Ring for the first unseen call-level nudge (morning brief, overdue, P1 due).
   const call=pending.find(n=>n.alert_level==="call" && !shownCalls.has(n.id));
   if(call && !activeCall && ringEnabled){ shownCalls.add(call.id); showCall(call); return; }
+  // AARTH starts the conversation itself: drop non-urgent follow-ups straight
+  // into the chat thread (it messages you first), then clear them from pending.
+  const fresh=pending.filter(n=>n.alert_level!=="call" && !shownChat.has(n.id));
+  for(const n of fresh){
+    shownChat.add(n.id);
+    addMsg("ai", n.body, []);
+    try{ await api(`/notifications/${n.id}/respond`,{method:"POST",body:{text:"opened in chat"}}); }catch(_){}
+  }
   if(speakTop && pending.length && !activeCall) speak(pending[0].title+". "+pending[0].body);
 }
 
