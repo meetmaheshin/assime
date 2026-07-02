@@ -94,9 +94,9 @@ def _openai_embedder(client: AsyncOpenAI, model: str) -> EmbedFn:
 def _azure_client() -> AsyncOpenAI:
     """Azure chat client. Uses the new v1 (OpenAI-compatible) base URL when set
     — required for the gpt-5 family — else the classic Azure OpenAI client."""
-    if settings.azure_openai_base_url:
+    if settings.azure_v1_base:
         return AsyncOpenAI(
-            base_url=settings.azure_openai_base_url,
+            base_url=settings.azure_v1_base,
             api_key=settings.azure_openai_api_key,
         )
     return AsyncAzureOpenAI(

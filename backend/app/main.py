@@ -50,7 +50,7 @@ def create_app() -> FastAPI:
             "status": "ok", "env": settings.env, "version": "build-13",
             "llm_provider": settings.resolved_provider,
             "reasoning_model": settings.azure_deployment_reasoning,
-            "api_mode": "v1" if settings.azure_openai_base_url else "classic",
+            "api_mode": "v1" if settings.azure_v1_base else "classic",
         }
 
     @app.get("/health/llm", tags=["meta"], include_in_schema=False)
@@ -58,9 +58,9 @@ def create_app() -> FastAPI:
         """TEMP diagnostic: live minimal chat call, surfaces the real error."""
         from app.services.llm import build_chat_client
         info = {
-            "mode": "v1" if settings.azure_openai_base_url else "classic",
+            "mode": "v1" if settings.azure_v1_base else "classic",
             "model": settings.azure_deployment_reasoning,
-            "base_url": settings.azure_openai_base_url or None,
+            "base_url": settings.azure_v1_base or None,
             "endpoint": settings.azure_openai_endpoint or None,
             "api_version": settings.azure_openai_api_version,
             "provider": settings.resolved_provider,

@@ -71,6 +71,21 @@ class Settings(BaseSettings):
         return "stub"
 
     @property
+    def azure_v1_base(self) -> str:
+        """The v1 (OpenAI-compatible) base URL, if configured — either explicitly
+        via AZURE_OPENAI_BASE_URL, or by pointing AZURE_OPENAI_ENDPOINT at a v1
+        URL (…services.ai.azure.com/openai/v1). Empty = use the classic client.
+        Auto-detecting the endpoint too means a misplaced v1 URL still works."""
+        candidates = [self.azure_openai_base_url, self.azure_openai_endpoint]
+        for raw in candidates:
+            ep = (raw or "").rstrip("/")
+            if ep.endswith("/openai/v1"):
+                return ep
+            if "services.ai.azure.com" in ep:
+                return ep + "/openai/v1" if "/openai/v1" not in ep else ep
+        return ""
+
+    @property
     def resolved_provider(self) -> str:
         if self.llm_provider != "auto":
             return self.llm_provider
