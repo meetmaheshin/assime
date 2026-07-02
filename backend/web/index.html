@@ -14,7 +14,7 @@
 <style>
   :root{
     --bg:#0d1117; --surface:#161b22; --surface2:#1c2330; --line:#2a3441;
-    --text:#e6edf3; --muted:#8b95a5; --accent:#4c8dff; --accent2:#7c5cff;
+    --text:#e6edf3; --muted:#8b95a5; --accent:#ff8a00; --accent2:#ff5722;
     --good:#3fb950; --warn:#f0883e; --danger:#f85149; --r:16px;
     --appw:440px; /* phone frame width on desktop */
   }
@@ -44,8 +44,8 @@
 
   /* ── Auth ── */
   #auth{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;justify-content:center;padding:28px;
-    background:radial-gradient(700px 400px at 70% 0%,rgba(124,92,255,.20),transparent),
-    radial-gradient(600px 400px at 0% 100%,rgba(76,141,255,.16),transparent),var(--bg)}
+    background:radial-gradient(700px 400px at 70% 0%,rgba(255,87,34,.20),transparent),
+    radial-gradient(600px 400px at 0% 100%,rgba(255,138,0,.16),transparent),var(--bg)}
   .logo{font-size:32px;font-weight:800;letter-spacing:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
   .stack{display:flex;flex-direction:column;gap:12px;margin-top:22px}
   .btn-primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;padding:14px;font-weight:600;font-size:16px}
@@ -82,7 +82,7 @@
   /* Voice FAB — thumb-reachable, sits above the bottom nav */
   .fabmic{position:absolute;right:16px;bottom:80px;z-index:25;width:62px;height:62px;border-radius:50%;
     font-size:26px;display:none;align-items:center;justify-content:center;color:#fff;border:none;
-    background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 10px 26px rgba(76,141,255,.5)}
+    background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 10px 26px rgba(255,138,0,.5)}
   .fabmic.show{display:flex}
   .fabmic{touch-action:none}
   .fabmic:active{transform:scale(.94)}
@@ -110,12 +110,12 @@
 
   /* Incoming call-style reminder */
   .calloverlay{position:absolute;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
-    background:radial-gradient(600px 500px at 50% 15%,rgba(124,92,255,.28),transparent),rgba(6,8,14,.97)}
+    background:radial-gradient(600px 500px at 50% 15%,rgba(255,87,34,.28),transparent),rgba(6,8,14,.97)}
   .callcard{width:100%;max-width:var(--appw);height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px 24px;text-align:center}
   .callavatar{width:104px;height:104px;border-radius:50%;display:flex;align-items:center;justify-content:center;
     font-weight:800;letter-spacing:1px;font-size:22px;color:#fff;
-    background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 0 0 rgba(124,92,255,.5);animation:callpulse 1.5s infinite}
-  @keyframes callpulse{0%{box-shadow:0 0 0 0 rgba(124,92,255,.55)}70%{box-shadow:0 0 0 26px rgba(124,92,255,0)}100%{box-shadow:0 0 0 0 rgba(124,92,255,0)}}
+    background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 0 0 rgba(255,87,34,.5);animation:callpulse 1.5s infinite}
+  @keyframes callpulse{0%{box-shadow:0 0 0 0 rgba(255,87,34,.55)}70%{box-shadow:0 0 0 26px rgba(255,87,34,0)}100%{box-shadow:0 0 0 0 rgba(255,87,34,0)}}
   .callkicker{color:var(--muted);font-size:14px;letter-spacing:.5px}
   .calltitle{font-size:24px;font-weight:800}
   .callbody{font-size:15px;color:var(--text);opacity:.9;line-height:1.45;max-width:340px}
@@ -779,7 +779,7 @@ $("#micBtn").onclick=async()=>{
   if(chatRec){
     const mr=chatRec; chatRec=null; $("#micBtn").classList.remove("rec"); toast("Transcribing…");
     let blob; try{ blob=await recStop(mr); }catch(_){ toast("Recording error"); return; }
-    try{ const t=await transcribe(blob); if(t){ $("#chatInput").value=t; send(); } else toast("Didn't catch that — try again"); }
+    try{ const t=await transcribe(blob); if(t){ $("#chatInput").value=t; send(); } else toast("Didn't catch that ("+Math.round(blob.size/1024)+"KB) — try again"); }
     catch(e){ toast("Voice failed: "+(e.message||"error")); }
   }else{
     if(!recSupported()){ toast("Voice needs Chrome or Edge"); return; }
@@ -795,7 +795,7 @@ $("#homeMic").onclick=async()=>{
   if(capRec){
     const mr=capRec; capRec=null; $("#homeMic").classList.remove("rec"); setCap("Transcribing…");
     let blob; try{ blob=await recStop(mr); }catch(_){ setCap("Recording error — tap to retry"); return; }
-    try{ const t=await transcribe(blob); if(!t){ setCap("Didn't catch that — tap and try again."); return; } setCap("“"+t+"”"); submitCapture(t); }
+    try{ const t=await transcribe(blob); if(!t){ setCap("Didn't catch that ("+Math.round(blob.size/1024)+"KB) — tap and try again."); return; } setCap("“"+t+"”"); submitCapture(t); }
     catch(e){ setCap("Voice failed: "+(e.message||"error")); }
   }else{
     if(!recSupported()){ setCap("Voice needs Chrome or Edge."); return; }

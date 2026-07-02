@@ -87,6 +87,9 @@ async def tts_stream(text: str):
 
 async def _deepgram_stt(audio: bytes, content_type: str) -> str:
     """Deepgram nova-2, language=multi — strong on Hindi/Hinglish."""
+    # Browser MediaRecorder sends "audio/webm;codecs=opus" — Deepgram wants the
+    # bare container type, and the codecs param can trip it up.
+    ct = (content_type or "audio/webm").split(";")[0].strip() or "audio/webm"
     params = {
         "model": settings.deepgram_model,
         "language": settings.deepgram_language,
@@ -95,7 +98,7 @@ async def _deepgram_stt(audio: bytes, content_type: str) -> str:
     }
     headers = {
         "Authorization": f"Token {settings.deepgram_api_key}",
-        "Content-Type": content_type or "audio/wav",
+        "Content-Type": ct,
     }
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
@@ -105,9 +108,11 @@ async def _deepgram_stt(audio: bytes, content_type: str) -> str:
         raise VoiceError(f"Deepgram STT failed ({resp.status_code}): {resp.text[:300]}")
     try:
         alt = resp.json()["results"]["channels"][0]["alternatives"][0]
-        return (alt.get("transcript") or "").strip()
+        text = (alt.get("transcript") or "").strip()
     except (KeyError, IndexError):
-        return ""
+        text = ""
+    logging.info("deepgram STT: %d bytes, ct=%s -> %d chars", len(audio), ct, len(text))
+    return text
 
 
 async def _cartesia_stt(audio: bytes, filename: str, content_type: str) -> str:
