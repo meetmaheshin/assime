@@ -331,6 +331,7 @@
             <div class="muted" style="font-size:13px;margin-top:-6px">Install AARTH like an app — one tap from your home screen.</div>
             <button class="btn-sm" id="installBtn">Install AARTH</button>
             <div id="installHint" class="muted" style="font-size:12px"></div>
+            <div id="appVersion" class="muted" style="font-size:11px;text-align:center;margin-top:10px;opacity:.7"></div>
           </div>
         </div>
       </section>
@@ -865,6 +866,7 @@ async function loadSettings(){
   $("#setNoRing").checked = !me.ring_enabled;
   $("#setVoice").checked = voiceOn;
   $("#setStatus").textContent="";
+  try{ const hv=await api("/health"); $("#appVersion").textContent="Version: "+(hv.version||"?"); }catch(_){}
 }
 $("#settingsBtn").onclick=()=>{ showTab("settings"); loadSettings(); };
 $("#upgradeBtn").onclick=()=>{ $("#upgradeBtn").textContent="Coming soon 🚀"; setTimeout(()=>{ $("#upgradeBtn").textContent="Upgrade"; },2000); };

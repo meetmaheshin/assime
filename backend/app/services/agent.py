@@ -55,6 +55,13 @@ def _parse_dt(s: str | None, now: datetime) -> datetime | None:
         dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=now.tzinfo or timezone.utc)
+        # Small models sometimes emit a past year (e.g. 2023 from training data).
+        # A scheduled item should never land years in the past — snap the year up.
+        if dt.year < now.year:
+            try:
+                dt = dt.replace(year=now.year)
+            except ValueError:  # Feb 29 edge
+                dt = dt.replace(year=now.year, day=28)
         return dt
     except ValueError:
         return None
@@ -154,8 +161,10 @@ async def run(
         "A meeting or task that has a time already IS its reminder — never offer "
         "to set a separate reminder; just confirm it's scheduled and that you'll "
         "remind them.\n"
-        f"Current local time: {now.isoformat()}; resolve relative times ('4am', "
-        "'tomorrow') against it. Use the user's name rarely, not every message. "
+        f"Current date-time: {now.isoformat()} — the year is {now.year}. ALWAYS "
+        f"use year {now.year} for 'today'/'tomorrow'; never a past year. Resolve "
+        "relative times ('4am', 'tomorrow') against it. Use the user's name "
+        "rarely, not every message. "
         "Never invent facts.\n"
         "LANGUAGE: reply in the SAME language and style the user uses. If they "
         "write in Hindi or Hinglish (Romanized Hindi), reply in natural Hinglish; "
