@@ -5,6 +5,8 @@ audio for TTS and a transcript string for STT.
 """
 from __future__ import annotations
 
+import logging
+
 import httpx
 
 from app.core.config import settings
@@ -41,18 +43,26 @@ async def tts_stream(text: str):
     """Stream MP3 audio from Cartesia as it's generated (low latency).
 
     Yields byte chunks; the browser plays them progressively via MediaSource.
+    On any failure it logs and simply ends the stream (empty), so the client
+    can fall back to the browser's built-in speech instead of erroring.
     """
     if not settings.voice_enabled:
-        raise VoiceError("Cartesia not configured")
-    async with httpx.AsyncClient(timeout=60) as client:
-        async with client.stream(
-            "POST", f"{_BASE}/tts/bytes", headers=_headers(), json=_tts_payload(text)
-        ) as resp:
-            if resp.status_code != 200:
-                body = (await resp.aread())[:300].decode("utf-8", "replace")
-                raise VoiceError(f"TTS failed ({resp.status_code}): {body}")
-            async for chunk in resp.aiter_bytes():
-                yield chunk
+        return
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            async with client.stream(
+                "POST", f"{_BASE}/tts/bytes", headers=_headers(),
+                json=_tts_payload(text),
+            ) as resp:
+                if resp.status_code != 200:
+                    body = (await resp.aread())[:300].decode("utf-8", "replace")
+                    logging.warning("Cartesia TTS failed (%s): %s", resp.status_code, body)
+                    return
+                async for chunk in resp.aiter_bytes():
+                    yield chunk
+    except Exception:
+        logging.exception("Cartesia TTS stream error")
+        return
 
 
 async def stt(audio: bytes, filename: str, content_type: str) -> str:
@@ -60,7 +70,9 @@ async def stt(audio: bytes, filename: str, content_type: str) -> str:
     if not settings.voice_enabled:
         raise VoiceError("Cartesia not configured")
     files = {"file": (filename or "clip.webm", audio, content_type or "audio/webm")}
-    data = {"model": settings.cartesia_stt_model, "language": "en"}
+    data = {"model": settings.cartesia_stt_model}
+    if settings.cartesia_stt_language:  # empty = auto-detect (Hindi + English)
+        data["language"] = settings.cartesia_stt_language
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
             f"{_BASE}/stt", headers=_headers(), data=data, files=files

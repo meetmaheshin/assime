@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     cartesia_version: str = "2024-11-13"
     cartesia_tts_model: str = "sonic-2"
     cartesia_stt_model: str = "ink-whisper"
+    cartesia_stt_language: str = ""  # "" = auto-detect (supports Hindi + English)
     # Default voice: "Priya — Trusted Operator" (Indian-accent female).
     cartesia_voice_id: str = "f6141af3-5f94-418c-80ed-a45d450e7e2e"
 

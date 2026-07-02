@@ -5,6 +5,8 @@ pull the most relevant memories, and hand them to the model as context. If
 nothing relevant is found, the model is told to say so and ask — never
 hallucinate (PRD AI behaviour).
 """
+import logging
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -75,8 +77,16 @@ async def chat(
             context = "\n".join(f"- ({mem.kind}) {mem.content}" for mem, _ in hits)
         else:
             context = "(no relevant memories found)"
-        prompt = f"Context (the user's memory):\n{context}\n\nUser: {payload.message}"
-        reply = await llm.complete(_system_prompt(user.assistant_name), prompt, reasoning=True)
+        prompt = (f"The user's name is {user.display_name}.\n"
+                  f"Context (the user's memory):\n{context}\n\nUser: {payload.message}")
+        try:
+            reply = await llm.complete(
+                _system_prompt(user.assistant_name), prompt, reasoning=True)
+        except Exception:
+            # Never 500 on an upstream AI error — degrade to a calm message.
+            logging.exception("chat LLM call failed")
+            reply = ("I'm having trouble reaching my AI brain right now. "
+                     "Your tasks and reminders still work — try me again in a moment.")
 
     # Persist both turns; recent turns feed short-term context, later summarized.
     db.add_all([

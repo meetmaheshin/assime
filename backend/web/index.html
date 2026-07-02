@@ -84,9 +84,13 @@
     font-size:26px;display:none;align-items:center;justify-content:center;color:#fff;border:none;
     background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 10px 26px rgba(76,141,255,.5)}
   .fabmic.show{display:flex}
+  .fabmic{touch-action:none}
   .fabmic:active{transform:scale(.94)}
   .fabmic.rec{background:var(--danger);animation:ripple 1.3s infinite}
   @keyframes ripple{0%{box-shadow:0 0 0 0 rgba(248,81,73,.5)}70%{box-shadow:0 0 0 18px rgba(248,81,73,0)}100%{box-shadow:0 0 0 0 rgba(248,81,73,0)}}
+  .toast{position:absolute;left:50%;transform:translateX(-50%);bottom:96px;z-index:70;
+    background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;
+    font-size:13px;box-shadow:0 10px 26px rgba(0,0,0,.5);max-width:80%;text-align:center}
   .capbubble{position:absolute;right:16px;bottom:152px;z-index:25;max-width:74%;
     background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;
     font-size:14px;line-height:1.4;box-shadow:0 12px 30px rgba(0,0,0,.55)}
@@ -153,7 +157,7 @@
   .composer{border-top:1px solid var(--line);padding:10px 12px;display:flex;gap:8px;align-items:center;background:var(--surface)}
   .composer textarea{resize:none;height:46px;max-height:120px;border-radius:23px;padding:12px 16px;line-height:22px;overflow-y:auto;scrollbar-width:none}
   .composer textarea::-webkit-scrollbar{display:none}
-  .cbtn{width:48px;height:48px;flex:0 0 48px;display:flex;align-items:center;justify-content:center;font-size:19px;background:var(--surface2);border:1px solid var(--line);border-radius:50%}
+  .cbtn{width:48px;height:48px;flex:0 0 48px;display:flex;align-items:center;justify-content:center;font-size:19px;background:var(--surface2);border:1px solid var(--line);border-radius:50%;touch-action:none}
   .cbtn.send{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;border:none}
   .cbtn.rec{background:var(--danger);color:#fff;border:none;animation:pulse 1.2s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
@@ -236,7 +240,7 @@
       <section class="screen" id="screen-chat">
         <div class="chatlog" id="chatlog"></div>
         <div class="composer">
-          <button class="cbtn" id="micBtn" title="Speak" aria-label="Speak">
+          <button class="cbtn" id="micBtn" title="Hold to talk" aria-label="Hold to talk">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
           </button>
           <textarea id="chatInput" placeholder="Ask AARTH…"></textarea>
@@ -333,9 +337,11 @@
       </section>
     </div>
 
+    <div id="toast" class="toast hidden"></div>
+
     <!-- Voice FAB + status bubble: thumb-reachable, above the nav -->
     <div id="capBubble" class="capbubble hidden"></div>
-    <button id="homeMic" class="fabmic" title="Tap and talk to add a task" aria-label="Voice add task">
+    <button id="homeMic" class="fabmic" title="Hold to talk" aria-label="Voice add task">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
     </button>
 
@@ -702,7 +708,7 @@ function recStop(mr){ return new Promise(res=>{
 async function transcribe(blob){
   const fd=new FormData(); fd.append("audio", blob, "clip.webm");
   const res=await fetch("/voice/stt",{method:"POST",headers:token?{"Authorization":"Bearer "+token}:{},body:fd});
-  if(!res.ok) throw new Error("Couldn't transcribe");
+  if(!res.ok){ let d=""; try{ d=(await res.json()).detail; }catch(_){} throw new Error(d||("STT "+res.status)); }
   return ((await res.json()).text||"").trim();
 }
 // Playback rate for AARTH's voice (1.0 = normal). Slightly slower = calmer.
@@ -732,35 +738,57 @@ async function speak(text){
   if(window.speechSynthesis){ const u=new SpeechSynthesisUtterance(clean); u.rate=VOICE_RATE; speechSynthesis.cancel(); speechSynthesis.speak(u); }
 }
 
-/* Chat mic (composer) */
-let chatMR=null;
-$("#micBtn").onclick=async()=>{
-  if(!recSupported()){ alert("Recording needs Chrome or Edge."); return; }
-  if(!chatMR){
-    try{ chatMR=await recStart(); $("#micBtn").classList.add("rec"); }
-    catch(_){ alert("Allow microphone access to use voice."); }
-  }else{
-    const mr=chatMR; chatMR=null; $("#micBtn").classList.remove("rec");
-    const blob=await recStop(mr);
-    try{ const t=await transcribe(blob); if(t){ $("#chatInput").value=t; send(); } }catch(_){}
-  }
-};
+/* Transient toast for voice/errors */
+function toast(msg){ const t=$("#toast"); if(!t)return; t.textContent=msg; t.classList.remove("hidden"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.add("hidden"),2800); }
 
-/* Home voice FAB — tap to start, tap again to stop → capture flow */
-let captureDraft=null, capMR=null;
-function setCap(msg){ const b=$("#capBubble"); if(!b) return; if(!msg){ b.classList.add("hidden"); return; } b.innerHTML=msg; b.classList.remove("hidden"); }
-$("#homeMic").onclick=async()=>{
-  if(!recSupported()){ setCap("Voice needs Chrome or Edge."); return; }
-  if(!capMR){
-    try{ capMR=await recStart(); $("#homeMic").classList.add("rec"); setCap("Listening… tap again when you're done."); }
-    catch(_){ setCap("Allow microphone access, then tap again."); }
-  }else{
-    const mr=capMR; capMR=null; $("#homeMic").classList.remove("rec"); setCap("Transcribing…");
-    const blob=await recStop(mr);
-    try{ const t=await transcribe(blob); if(!t){ setCap("Didn't catch that — tap and try again."); return; } setCap("“"+t+"”"); submitCapture(t); }
-    catch(_){ setCap("Couldn't transcribe — try again."); }
+/* Hold-to-talk: press & hold to record, release to transcribe. Intuitive on
+   both touch and mouse; handles releasing before the mic finishes opening. */
+function bindHoldToTalk(btn, {onStart, onFinish}){
+  let want=false, mr=null;
+  async function begin(e){
+    e.preventDefault();
+    if(want) return; want=true;
+    if(!recSupported()){ want=false; onStart(false,"Voice needs Chrome or Edge"); return; }
+    try{
+      const m=await recStart();
+      if(!want){ try{m.stop();}catch(_){}; if(mediaStream){mediaStream.getTracks().forEach(t=>t.stop());mediaStream=null;} return; }
+      mr=m; btn.classList.add("rec"); onStart(true);
+    }catch(_){ want=false; onStart(false,"Allow microphone access"); }
   }
-};
+  async function end(){
+    if(!want) return; want=false;
+    if(!mr) return;
+    const m=mr; mr=null; btn.classList.remove("rec");
+    const blob=await recStop(m);
+    await onFinish(blob);
+  }
+  btn.addEventListener("pointerdown",begin);
+  btn.addEventListener("pointerup",end);
+  btn.addEventListener("pointerleave",end);
+  btn.addEventListener("pointercancel",end);
+  btn.addEventListener("contextmenu",e=>e.preventDefault());
+}
+
+/* Chat mic: hold to talk */
+bindHoldToTalk($("#micBtn"), {
+  onStart:(ok,msg)=>{ if(!ok&&msg) toast(msg); else if(ok) toast("Listening… release to send"); },
+  onFinish: async (blob)=>{
+    try{ const t=await transcribe(blob); if(t){ $("#chatInput").value=t; send(); } else toast("Didn't catch that"); }
+    catch(e){ toast("Voice: "+(e.message||"failed")); }
+  }
+});
+
+/* Home voice FAB: hold to talk → capture flow */
+let captureDraft=null;
+function setCap(msg){ const b=$("#capBubble"); if(!b) return; if(!msg){ b.classList.add("hidden"); return; } b.innerHTML=msg; b.classList.remove("hidden"); }
+bindHoldToTalk($("#homeMic"), {
+  onStart:(ok,msg)=>{ setCap(ok ? "🎙️ Listening… release when you're done." : (msg||"Mic error")); },
+  onFinish: async (blob)=>{
+    setCap("Transcribing…");
+    try{ const t=await transcribe(blob); if(!t){ setCap("Didn't catch that — hold and try again."); return; } setCap("“"+t+"”"); submitCapture(t); }
+    catch(e){ setCap("Voice: "+(e.message||"failed")); }
+  }
+});
 async function submitCapture(text){
   if(!text){ setCap("Didn't catch that — try again."); return; }
   try{ const res=await api("/tasks/capture",{method:"POST",body:{utterance:text,draft:captureDraft}}); handleCapture(res); }
