@@ -99,6 +99,33 @@
   .reason:active{transform:scale(.96)}
   .n-ack{margin-top:10px;font-size:13px;color:var(--good);background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.3);border-radius:10px;padding:8px 10px}
 
+  /* Incoming call-style reminder */
+  .calloverlay{position:absolute;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(600px 500px at 50% 15%,rgba(124,92,255,.28),transparent),rgba(6,8,14,.97)}
+  .callcard{width:100%;max-width:var(--appw);height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px 24px;text-align:center}
+  .callavatar{width:104px;height:104px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-weight:800;letter-spacing:1px;font-size:22px;color:#fff;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 0 0 rgba(124,92,255,.5);animation:callpulse 1.5s infinite}
+  @keyframes callpulse{0%{box-shadow:0 0 0 0 rgba(124,92,255,.55)}70%{box-shadow:0 0 0 26px rgba(124,92,255,0)}100%{box-shadow:0 0 0 0 rgba(124,92,255,0)}}
+  .callkicker{color:var(--muted);font-size:14px;letter-spacing:.5px}
+  .calltitle{font-size:24px;font-weight:800}
+  .callbody{font-size:15px;color:var(--text);opacity:.9;line-height:1.45;max-width:340px}
+  .callactions{display:flex;gap:18px;margin-top:26px;align-items:center;justify-content:center}
+  .callbtn{width:66px;height:66px;border-radius:50%;color:#fff;font-size:0;display:flex;align-items:center;justify-content:center;position:relative}
+  .callbtn span{position:absolute;bottom:-22px;font-size:12px;color:var(--muted);white-space:nowrap}
+  .callbtn.answer{background:var(--good)}
+  .callbtn.hang{background:var(--danger)}
+  .callbtn.snooze{background:var(--surface2);border:1px solid var(--line)}
+  .callbtn:active{transform:scale(.93)}
+  .callbtn::before{content:"";width:26px;height:26px;background:currentColor;-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center}
+  .callbtn.answer::before{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11 11 0 0 0 3.4.55 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11 11 0 0 0 .55 3.4 1 1 0 0 1-.25 1z'/%3E%3C/svg%3E");mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11 11 0 0 0 3.4.55 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11 11 0 0 0 .55 3.4 1 1 0 0 1-.25 1z'/%3E%3C/svg%3E")}
+  .callbtn.hang{color:#fff}
+  .callbtn.hang::before{transform:rotate(135deg)}
+  .callbtn.snooze{color:var(--warn)}
+  .callbtn.snooze::before{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M12 7v5l3 2'/%3E%3Ccircle cx='12' cy='12' r='9' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E");mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='white' stroke-width='2' stroke-linecap='round' d='M12 7v5l3 2'/%3E%3Ccircle cx='12' cy='12' r='9' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E")}
+  .meeting{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:center;font-size:14px}
+  .meeting .mt{font-weight:700;color:var(--accent);min-width:52px}
+
   /* Chat */
   #screen-chat{padding:0}
   .chatlog{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
@@ -178,6 +205,7 @@
           <div class="muted" id="briefSub" style="font-size:14px;margin-bottom:16px">Loading…</div>
 
           <div id="overdueBanner"></div>
+          <div id="meetingsBox"></div>
           <div class="h">Today's priorities</div>
           <div id="priorities"><div class="muted">Nothing yet.</div></div>
         </div>
@@ -249,6 +277,22 @@
       <button class="nav" data-tab="add"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg></span>Add</button>
       <button class="nav" data-tab="memory"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3z"/></svg></span>Memory</button>
     </nav>
+
+    <!-- INCOMING CALL-STYLE REMINDER -->
+    <div id="callOverlay" class="calloverlay hidden">
+      <div class="callcard">
+        <div class="callavatar">AARTH</div>
+        <div id="callKicker" class="callkicker">AARTH is calling…</div>
+        <div id="callTitle" class="calltitle"></div>
+        <div id="callBody" class="callbody"></div>
+        <div id="callReasons" class="reasons" style="justify-content:center"></div>
+        <div id="callActions" class="callactions">
+          <button class="callbtn snooze" id="callSnooze"><span>Snooze</span></button>
+          <button class="callbtn answer" id="callAnswer"><span>Answer</span></button>
+          <button class="callbtn hang" id="callDismiss"><span>Dismiss</span></button>
+        </div>
+      </div>
+    </div>
 
     <!-- DUP MODAL -->
     <div id="dupOverlay" class="overlay hidden">
@@ -360,6 +404,13 @@ async function loadToday(){
     $("#briefSub").textContent=bits.length?bits.join(" · "):"You're all clear. Nice.";
     $("#overdueBanner").innerHTML = t.overdue.length
       ? `<div class="banner">⚠️ <b>${h(t.overdue[0].title)}</b> is overdue. What happened?</div>` : "";
+    const mb=$("#meetingsBox");
+    if(t.meetings && t.meetings.length){
+      mb.innerHTML='<div class="h">Meetings today</div>'+t.meetings.map(m=>{
+        const hh=new Date(m.starts_at).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+        return `<div class="meeting"><span class="mt">${hh}</span><span>${h(m.title)}</span></div>`;
+      }).join("");
+    } else mb.innerHTML="";
     renderPriorities(t.priorities);
     if(!$("#chatlog").children.length){
       addMsg("ai", t.greeting+(t.priorities.length?` Your top priority is “${t.priorities[0].title}”. Want to start there?`:" What would you like to get done today?"),[]);
@@ -451,6 +502,7 @@ $("#memQuery").addEventListener("input",e=>{
 
 /* ── Notifications / follow-ups ── */
 let notifTimer=null;
+const shownCalls=new Set();
 const REASONS=[["blocked","Blocked"],["forgot","Forgot"],["too_busy","Too busy"],["waiting","Waiting on someone"],["not_important","Not important"],["other","Other"]];
 async function loadNotifications(speakTop){
   let list=[]; try{ list=await api("/notifications"); }catch(_){ return; }
@@ -459,8 +511,58 @@ async function loadNotifications(speakTop){
   if(pending.length){ badge.textContent=pending.length; badge.classList.remove("hidden"); }
   else badge.classList.add("hidden");
   renderNotif(list);
-  if(speakTop && pending.length) speak(pending[0].title+". "+pending[0].body);
+  // Ring for the first unseen call-level nudge (morning brief, overdue, P1 due).
+  const call=pending.find(n=>n.alert_level==="call" && !shownCalls.has(n.id));
+  if(call && !activeCall){ shownCalls.add(call.id); showCall(call); return; }
+  if(speakTop && pending.length && !activeCall) speak(pending[0].title+". "+pending[0].body);
 }
+
+/* Ringtone (Web Audio) + vibration */
+let audioCtx=null, ringTimer=null, vibeTimer=null, activeCall=null;
+function unlockAudio(){ try{ if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==="suspended") audioCtx.resume(); }catch(_){} }
+document.addEventListener("click", unlockAudio);
+function ringOnce(){
+  if(!audioCtx) return; const t0=audioCtx.currentTime;
+  [880,660].forEach((f,i)=>{ const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.type="sine"; o.frequency.value=f; o.connect(g); g.connect(audioCtx.destination);
+    const t=t0+i*0.3; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.25,t+0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+0.28); o.start(t); o.stop(t+0.3); });
+}
+function startRing(){ unlockAudio(); ringOnce(); ringTimer=setInterval(ringOnce,2000);
+  if(navigator.vibrate){ const v=()=>navigator.vibrate([500,250,500]); v(); vibeTimer=setInterval(v,1400); } }
+function stopRing(){ if(ringTimer){clearInterval(ringTimer);ringTimer=null;} if(vibeTimer){clearInterval(vibeTimer);vibeTimer=null;} if(navigator.vibrate)navigator.vibrate(0); }
+function showCall(n){
+  activeCall=n;
+  $("#callKicker").textContent="AARTH is calling…";
+  $("#callTitle").textContent=n.title;
+  $("#callBody").textContent="";
+  $("#callReasons").innerHTML="";
+  $("#callActions").style.display="flex";
+  $("#callOverlay").classList.remove("hidden");
+  startRing();
+}
+function closeCall(){ stopRing(); $("#callOverlay").classList.add("hidden"); activeCall=null; }
+$("#callAnswer").onclick=async()=>{
+  if(!activeCall) return; const n=activeCall; stopRing();
+  $("#callKicker").textContent="Connected"; $("#callBody").textContent=n.body; speak(n.body);
+  if(n.kind==="overdue"){
+    $("#callActions").style.display="none";
+    $("#callReasons").innerHTML=REASONS.map(r=>`<button class="reason" data-code="${r[0]}">${r[1]}</button>`).join("");
+    $("#callReasons").querySelectorAll(".reason").forEach(b=>b.onclick=async()=>{
+      try{ const res=await api(`/notifications/${n.id}/respond`,{method:"POST",body:{reason_code:b.dataset.code}}); speak(res.message); }catch(_){}
+      closeCall(); loadNotifications();
+    });
+  }else{
+    try{ await api(`/notifications/${n.id}/respond`,{method:"POST",body:{text:"acknowledged"}}); }catch(_){}
+    setTimeout(()=>{ closeCall(); loadNotifications(); }, 2500);
+  }
+};
+$("#callSnooze").onclick=async()=>{ if(!activeCall)return; const n=activeCall; stopRing();
+  try{ await api(`/notifications/${n.id}/snooze?minutes=10`,{method:"POST"}); }catch(_){}
+  shownCalls.delete(n.id); closeCall(); };
+$("#callDismiss").onclick=async()=>{ if(!activeCall)return; const n=activeCall; stopRing();
+  try{ await api(`/notifications/${n.id}/dismiss`,{method:"POST"}); }catch(_){}
+  closeCall(); loadNotifications(); };
 function renderNotif(list){
   const box=$("#notifList");
   if(!list.length){ box.innerHTML='<div class="muted">Nothing right now. You’re on top of things.</div>'; return; }

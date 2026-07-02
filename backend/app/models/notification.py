@@ -5,8 +5,9 @@ client, and answered (e.g. an overdue reason) by the user.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -35,3 +36,9 @@ class Notification(Base, UUIDMixin, TimestampMixin):
     )
     # pending | answered | dismissed
     status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
+    # normal (silent badge) | call (ring + vibrate + incoming-call UI)
+    alert_level: Mapped[str] = mapped_column(String(8), default="normal", nullable=False)
+    # If set and in the future, the nudge is hidden until then (snooze).
+    snoozed_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

@@ -1,8 +1,9 @@
 """Proactive notifications: list (auto-generates due nudges), respond, dismiss."""
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -44,9 +45,15 @@ async def list_notifications(
 ) -> list[Notification]:
     # Generate any due nudges first (lazy scheduler), then return recent ones.
     await nudges.generate(db, user)
+    now = datetime.now(timezone.utc)
     rows = await db.scalars(
         select(Notification)
-        .where(Notification.user_id == user.id, Notification.status != "dismissed")
+        .where(
+            Notification.user_id == user.id,
+            Notification.status != "dismissed",
+            or_(Notification.snoozed_until.is_(None),
+                Notification.snoozed_until <= now),
+        )
         .order_by(Notification.created_at.desc())
         .limit(30)
     )
@@ -89,6 +96,22 @@ async def respond(
     await db.commit()
     await db.refresh(n)
     return RespondResult(message=message, notification=NotificationOut.model_validate(n))
+
+
+@router.post("/{nid}/snooze", response_model=NotificationOut)
+async def snooze(
+    nid: uuid.UUID,
+    minutes: int = 10,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Notification:
+    n = await _owned(db, user, nid)
+    minutes = max(1, min(minutes, 24 * 60))
+    n.snoozed_until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    n.status = "pending"
+    await db.commit()
+    await db.refresh(n)
+    return n
 
 
 @router.post("/{nid}/dismiss", status_code=status.HTTP_204_NO_CONTENT)

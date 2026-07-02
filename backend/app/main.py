@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
-    auth, chat, notifications, planning, projects, tasks, voice,
+    auth, chat, meetings, notifications, planning, projects, tasks, voice,
 )
 from app.core.config import settings
 
@@ -49,6 +49,7 @@ def create_app() -> FastAPI:
     app.include_router(planning.router)
     app.include_router(voice.router)
     app.include_router(notifications.router)
+    app.include_router(meetings.router)
 
     # Serve the web demo client from the same origin (no CORS needed).
     if WEB_DIR.is_dir():

@@ -13,6 +13,7 @@ class NotificationOut(BaseModel):
     body: str
     task_id: uuid.UUID | None
     status: str
+    alert_level: str
     created_at: datetime
 
 
