@@ -52,6 +52,16 @@ async def me(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+@router.get("/me/profile")
+async def my_profile(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """What AARTH has learned about you (transparency + trust)."""
+    from app.services import profile_service
+    return {"summary": await profile_service.get_summary(db, user.id)}
+
+
 @router.patch("/me/settings", response_model=UserOut)
 async def update_settings(
     payload: SettingsUpdate,
