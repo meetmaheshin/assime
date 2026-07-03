@@ -1,0 +1,10 @@
+{
+  "appId": "com.aarth.app",
+  "appName": "AARTH",
+  "webDir": "www",
+  "server": {
+    "url": "https://assime-production.up.railway.app/ui/",
+    "cleartext": false,
+    "androidScheme": "https"
+  }
+}

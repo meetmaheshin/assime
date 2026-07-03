@@ -1,7 +1,7 @@
 // AARTH service worker. The HTML is network-first so code updates apply on the
 // next load; static assets (icons/manifest) are cache-first. API calls
 // (/auth, /tasks, /voice, ...) are never touched.
-const CACHE = "aarth-v7";
+const CACHE = "aarth-v8";
 const SHELL = [
   "/ui/", "/ui/index.html",
   "/ui/manifest.webmanifest", "/ui/icon-192.png", "/ui/icon-512.png",

@@ -503,10 +503,39 @@ async function loadToday(){
     const open=all.filter(x=>x.status!=="completed")
       .sort((a,b)=> a.priority-b.priority || ((a.deadline||"~")>(b.deadline||"~")?1:-1));
     renderPriorities(open);
+    syncNativeReminders(all);   // schedule on-device alarms (native app only)
     if(!$("#chatlog").children.length){
       addMsg("ai", t.greeting+(t.priorities.length?` Your top priority is “${t.priorities[0].title}”. Want to start there?`:" What would you like to get done today?"),[]);
     }
   }catch(e){console.error(e);}
+}
+
+/* Native (Capacitor) on-device reminders — fire even when the app is closed or
+   offline. No-op in a plain browser (window.Capacitor is undefined). */
+function _nId(uuid){ let h=0; for(const c of uuid) h=(h*31+c.charCodeAt(0))|0; return Math.abs(h)%1000000000; }
+async function syncNativeReminders(tasks){
+  const LN = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
+  if(!LN) return;
+  try{
+    const perm = await LN.requestPermissions();
+    if(perm.display!=="granted") return;
+    // Clear our previously-scheduled reminders, then reschedule from live tasks.
+    const pend = await LN.getPending();
+    if(pend.notifications && pend.notifications.length)
+      await LN.cancel({notifications: pend.notifications.map(n=>({id:n.id}))});
+    const now=Date.now(), out=[];
+    (tasks||[]).forEach(t=>{
+      if(t.status==="completed" || !t.deadline) return;
+      const d=new Date(t.deadline); const at=d.getTime();
+      if(!(d.getHours()||d.getMinutes())) return;        // only timed tasks get an alarm
+      if(at<=now) return;
+      const base=_nId(t.id);
+      out.push({id:base, title:"AARTH", body:`“${t.title}” — it's time.`, schedule:{at:new Date(at)}});
+      if(at-now > 11*60000)                              // 10-min heads-up if far enough out
+        out.push({id:base+1000000000, title:"AARTH", body:`“${t.title}” in 10 minutes.`, schedule:{at:new Date(at-10*60000)}});
+    });
+    if(out.length) await LN.schedule({notifications:out});
+  }catch(e){ console.warn("native reminders failed", e); }
 }
 function fmtWhen(iso){
   const d=new Date(iso);
