@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.task import Task, TaskHistory
 from app.models.user import User
-from app.services import memory_service
+from app.services import memory_service, profile_service
 from app.services.llm import build_chat_client, llm
 
 TOOLS = [
@@ -43,6 +43,15 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "title": {"type": "string", "description": "task title (fuzzy match ok)"},
         }, "required": ["title"]}}},
+    {"type": "function", "function": {
+        "name": "remember_fact",
+        "description": "Save a durable fact or preference the user reveals about "
+        "themselves — e.g. 'call me Mahesh', 'I work best in the mornings', 'my "
+        "manager is Priya', 'don't remind me before 9am'. Use it whenever they "
+        "share something worth remembering long-term (NOT for one-off tasks).",
+        "parameters": {"type": "object", "properties": {
+            "fact": {"type": "string", "description": "the fact/preference to remember"},
+        }, "required": ["fact"]}}},
 ]
 
 
@@ -143,9 +152,20 @@ async def _complete_task(db, user, now, args) -> str:
     return f'Marked "{row.title}" done.'
 
 
+async def _remember_fact(db, user, now, args) -> str:
+    fact = (args.get("fact") or "").strip()
+    if not fact:
+        return "Nothing to remember."
+    await memory_service.remember(
+        db, llm, user_id=user.id, kind="preference", content=fact,
+        source_type="preference", commit=True)
+    return f"Got it — I'll remember that: {fact}"
+
+
 _EXECUTORS = {
     "create_task": _create_task,
     "complete_task": _complete_task,
+    "remember_fact": _remember_fact,
 }
 
 
@@ -181,6 +201,7 @@ async def run(
     task_lines = "; ".join(
         f"P{t.priority} {t.title}" + (f" (at {_loc(t.deadline)})" if t.deadline else "")
         for t in tasks) or "none"
+    profile = await profile_service.get_summary(db, user.id)
 
     system = (
         f"You are {user.assistant_name}, {user.display_name}'s executive assistant. "
@@ -213,9 +234,12 @@ async def run(
         "reminder. If create_task reports a CONFLICT, tell them and ask before "
         "adding both. If a time already passed today, use the next day.\n"
         "Don't blindly repeat old titles/times from history, but DO use context to "
-        "reason. Keep replies to 1-3 short sentences. Use their name rarely. Never "
+        "reason. Keep replies to 1-3 short sentences. Use their name rarely. When "
+        "the user reveals a lasting preference or fact about themselves, call "
+        "remember_fact. Use what you know about them to be more personal. Never "
         f"invent facts. Now: {now.isoformat()} (year {now.year}; never a past year).\n\n"
-        f"Current state —\nTasks: {task_lines}\n\n"
+        + (f"What I know about {user.display_name}:\n{profile}\n\n" if profile else "")
+        + f"Current state —\nTasks: {task_lines}\n\n"
         f"Relevant memory:\n{context}"
     )
 

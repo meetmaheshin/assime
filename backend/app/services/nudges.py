@@ -18,6 +18,7 @@ import logging
 from app.models.notification import Notification
 from app.models.task import Task
 from app.models.user import User
+from app.services import profile_service
 from app.services.llm import llm
 
 DAILY_CAP = 6  # never spam
@@ -25,7 +26,8 @@ CREATE_GRACE = timedelta(hours=3)  # don't nag about a just-added task
 FOLLOWUP_GAP = timedelta(hours=1)  # wait this long after a timed task, then check in
 
 
-async def _accountability_message(user: User, open_tasks, now: datetime, mode: str) -> str:
+async def _accountability_message(user: User, open_tasks, now: datetime, mode: str,
+                                  profile: str = "") -> str:
     """LLM-written, human, ASSERTIVE check-in about ALL pending items — references
     why they matter and pushes the user to finish. Falls back to a firm template
     if the model is unavailable. `mode` = "followup" | "evening"."""
@@ -56,8 +58,10 @@ async def _accountability_message(user: User, open_tasks, now: datetime, mode: s
         "emojis, no corporate tone. Sound like a real person who genuinely wants "
         "them to succeed and won't let them off the hook."
     )
-    prompt = (f"{when} {user.display_name}'s still-open items:\n{tasklist}\n\n"
-              "Write the check-in message now (plain text, no lists).")
+    know = f"What you know about {user.display_name}:\n{profile}\n\n" if profile else ""
+    prompt = (f"{when} {know}{user.display_name}'s still-open items:\n{tasklist}\n\n"
+              "Write the check-in message now (plain text, no lists). Use what you "
+              "know about them to make it personal and land harder.")
     try:
         msg = (await llm.complete(system, prompt, reasoning=False)).strip()
         if msg:
@@ -180,7 +184,9 @@ async def generate(
                 Notification.user_id == user.id, Notification.kind == "followup",
                 Notification.created_at >= now - timedelta(hours=3)))
             if not recent:
-                msg = await _accountability_message(user, open_tasks, now, "followup")
+                profile = await profile_service.get_summary(db, user.id)
+                msg = await _accountability_message(
+                    user, open_tasks, now, "followup", profile)
                 n = Notification(user_id=user.id, kind="followup",
                                  title="Checking in", body=msg, alert_level="call")
                 db.add(n)
@@ -202,7 +208,9 @@ async def generate(
                 and not await _exists_today(
                     db, user.id, "evening_review", None, day_start_utc):
             if open_tasks:
-                body = await _accountability_message(user, open_tasks, now, "evening")
+                profile = await profile_service.get_summary(db, user.id)
+                body = await _accountability_message(
+                    user, open_tasks, now, "evening", profile)
             else:
                 body = ("Day's done and nothing's left open — solid work. Want to "
                         "line anything up for tomorrow?")

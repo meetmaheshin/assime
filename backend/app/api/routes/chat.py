@@ -7,13 +7,13 @@ hallucinate (PRD AI behaviour).
 """
 import logging
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.models.conversation import ConversationTurn
 from app.models.user import User
 from app.schemas.chat import (
@@ -23,8 +23,19 @@ from app.schemas.chat import (
     MemorySearchHit,
     MemorySearchRequest,
 )
-from app.services import agent, memory_service
+from app.services import agent, memory_service, profile_service
 from app.services.llm import llm
+
+
+async def _refresh_profile_bg(user_id) -> None:
+    """Keep the learned profile fresh (gated to ~once/day) without blocking chat."""
+    try:
+        async with SessionLocal() as db:
+            u = await db.get(User, user_id)
+            if u:
+                await profile_service.maybe_refresh(db, llm, u)
+    except Exception:
+        logging.exception("background profile refresh failed")
 
 router = APIRouter(tags=["chat"])
 
@@ -64,6 +75,7 @@ def _stub_reply(name: str, message: str, hits: list) -> str:
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     payload: ChatRequest,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ChatResponse:
@@ -109,6 +121,10 @@ async def chat(
         await memory_service.prune_conversation(db, llm, user_id=user.id)
     except Exception:
         pass
+
+    # Learn from this interaction — refresh the profile in the background (~1/day).
+    if settings.resolved_provider != "stub":
+        background_tasks.add_task(_refresh_profile_bg, user.id)
 
     # Citations only for real answers, and only clearly-relevant memories.
     citations = []
