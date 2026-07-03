@@ -565,7 +565,7 @@ async function loadToday(){
     renderPriorities(open);
     syncNativeReminders(all);   // schedule on-device alarms (native app only)
     if(!$("#chatlog").children.length){
-      addMsg("ai", t.greeting+(t.priorities.length?` Your top priority is “${t.priorities[0].title}”. Want to start there?`:" What would you like to get done today?"),[]);
+      addMsg("ai", t.greeting+(t.priorities.length?` Your top priority is “${t.priorities[0].title}”. Want to start there?`:" What would you like to get done today?"),[],true);
     }
   }catch(e){console.error(e);}
 }
@@ -681,7 +681,7 @@ async function createTask(skip){
     const res=await api("/tasks",{method:"POST",body});
     if(res.task===null&&res.possible_duplicates.length){showDup(res.possible_duplicates,{type:"form",body},res.message);return;}
     $("#ntTitle").value="";$("#ntReason").value="";$("#ntDeadline").value="";
-    addMsg("ai",`Added “${title}”. I'll keep you accountable.`,[]);
+    addMsg("ai",`Added “${title}”. I'll keep you accountable.`,[],true);
     await loadToday(); showTab("today");
   }catch(e){alert(e.message);}
 }
@@ -728,15 +728,16 @@ async function loadHistory(){
   }catch(_){}
   return false;
 }
-async function send(){
+async function send(viaVoice){
   const msg=$("#chatInput").value.trim(); if(!msg) return;
   $("#chatInput").value=""; $("#chatInput").style.height="46px"; addMsg("user",msg,[]);
   const typing=document.createElement("div"); typing.className="msg ai"; typing.textContent="…";
   $("#chatlog").appendChild(typing); $("#chatlog").scrollTop=1e9;
-  try{const res=await api("/chat",{method:"POST",body:{message:msg}}); typing.remove(); addMsg("ai",res.reply,res.citations); loadToday();}
-  catch(e){typing.remove(); addMsg("ai","(error: "+e.message+")",[]);}
+  // Speak the reply ONLY when the user used voice — typing stays silent (saves TTS).
+  try{const res=await api("/chat",{method:"POST",body:{message:msg}}); typing.remove(); addMsg("ai",res.reply,res.citations,!viaVoice); loadToday();}
+  catch(e){typing.remove(); addMsg("ai","(error: "+e.message+")",[],true);}
 }
-$("#sendBtn").onclick=send;
+$("#sendBtn").onclick=()=>send();
 const chatInput=$("#chatInput");
 function autoGrow(){ chatInput.style.height="46px"; chatInput.style.height=Math.min(chatInput.scrollHeight,120)+"px"; }
 chatInput.addEventListener("input",autoGrow);
@@ -776,7 +777,7 @@ async function loadNotifications(speakTop){
   const fresh=pending.filter(n=>!shownChat.has(n.id));
   for(const n of fresh){
     shownChat.add(n.id);
-    addMsg("ai", n.body, []);
+    addMsg("ai", n.body, [], true);   // silent — proactive text, no TTS cost
     try{ await api(`/notifications/${n.id}/respond`,{method:"POST",body:{text:"seen in chat"}}); }catch(_){}
   }
   if(speakTop && pending.length && !activeCall) speak(pending[0].title+". "+pending[0].body);
@@ -921,7 +922,7 @@ $("#micBtn").onclick=async()=>{
   if(chatRec){
     const mr=chatRec; chatRec=null; $("#micBtn").classList.remove("rec"); toast("Transcribing…");
     let blob; try{ blob=await recStop(mr); }catch(_){ toast("Recording error"); return; }
-    try{ const t=await transcribe(blob); if(t){ $("#chatInput").value=t; send(); } else toast("Didn't catch that ("+Math.round(blob.size/1024)+"KB) — try again"); }
+    try{ const t=await transcribe(blob); if(t){ $("#chatInput").value=t; send(true); } else toast("Didn't catch that ("+Math.round(blob.size/1024)+"KB) — try again"); }
     catch(e){ toast("Voice failed: "+(e.message||"error")); }
   }else{
     if(!recSupported()){ toast("Voice needs Chrome or Edge"); return; }
