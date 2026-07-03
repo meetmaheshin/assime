@@ -517,10 +517,25 @@ async function loadToday(){
 function getLN(){ return window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications; }
 function isNative(){ return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); }
 function _nId(uuid){ let h=0; for(const c of uuid) h=(h*31+c.charCodeAt(0))|0; return Math.abs(h)%1000000000; }
+// High-importance channel with AARTH's signature sound -> heads-up banner + tone
+// like a messenger app. Bump the id if the sound file ever changes (Android
+// locks a channel's sound at creation time).
+const NCHAN="aarth-alerts-v1", NSOUND="aarth_alert.wav";
+let _chanReady=false;
+async function ensureNativeChannel(){
+  const LN=getLN(); if(!LN || _chanReady) return;
+  try{
+    await LN.createChannel({ id:NCHAN, name:"AARTH reminders",
+      description:"Task reminders and daily check-ins", importance:5,
+      visibility:1, sound:NSOUND, vibration:true, lights:true, lightColor:"#ff7a00" });
+    _chanReady=true;
+  }catch(e){ console.warn("createChannel failed", e); }
+}
 async function ensureNativePerm(){
   const LN=getLN(); if(!LN) return false;
   let p=await LN.checkPermissions();
   if(p.display!=="granted") p=await LN.requestPermissions();
+  if(p.display==="granted") await ensureNativeChannel();
   return p.display==="granted";
 }
 async function syncNativeReminders(tasks){
@@ -538,9 +553,9 @@ async function syncNativeReminders(tasks){
       if(!(d.getHours()||d.getMinutes())) return;        // only timed tasks get an alarm
       if(at<=now) return;
       const base=_nId(t.id);
-      out.push({id:base, title:"AARTH", body:`“${t.title}” — it's time.`, schedule:{at:new Date(at), allowWhileIdle:true}});
+      out.push({id:base, title:"AARTH", body:`“${t.title}” — it's time.`, channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(at), allowWhileIdle:true}});
       if(at-now > 11*60000)                              // 10-min heads-up if far enough out
-        out.push({id:base+1000000000, title:"AARTH", body:`“${t.title}” in 10 minutes.`, schedule:{at:new Date(at-10*60000), allowWhileIdle:true}});
+        out.push({id:base+1000000000, title:"AARTH", body:`“${t.title}” in 10 minutes.`, channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(at-10*60000), allowWhileIdle:true}});
     });
     if(out.length) await LN.schedule({notifications:out});
   }catch(e){ console.warn("native reminders failed", e); }
@@ -557,7 +572,7 @@ $("#testNativeBtn").onclick=async()=>{
   if(!LN){ el.textContent="Not in the AARTH app — open the installed app to test phone alarms."; toast("Open the installed app to test."); return; }
   if(!(await ensureNativePerm())){ el.textContent="Notification permission denied — enable it in phone settings."; return; }
   try{
-    await LN.schedule({notifications:[{id: 999001, title:"AARTH test", body:"This is a test alarm — fired ✓", schedule:{at:new Date(Date.now()+10000), allowWhileIdle:true}}]});
+    await LN.schedule({notifications:[{id: 999001, title:"AARTH test", body:"This is a test alarm — fired ✓", channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(Date.now()+10000), allowWhileIdle:true}}]});
     el.textContent="Scheduled ✓ — close the app now; it should buzz in ~10 seconds.";
     toast("Test alarm in 10s — you can close the app.");
   }catch(e){ el.textContent="Schedule failed: "+(e.message||e); }
