@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.memory import Memory
 from app.models.profile import UserProfile
 from app.models.task import Task, TaskHistory
 from app.models.user import User
@@ -65,8 +66,15 @@ async def _gather_signals(db: AsyncSession, user: User) -> str:
     top_reasons = ", ".join(f"{k} x{v}" for k, v in reasons.most_common(4)) or "none logged"
     recent = "; ".join(t.title + (f" — {t.reason}" if t.reason else "")
                        for t in tasks[:25])
+    prefs = list(await db.scalars(
+        select(Memory).where(
+            Memory.user_id == user.id,
+            Memory.kind.in_(["preference", "note", "person", "decision"]))
+        .order_by(Memory.created_at.desc()).limit(20)))
+    pref_txt = "; ".join(m.content for m in prefs) or "none stated yet"
     return (
         f"Name: {user.display_name}. Timezone: {user.timezone}.\n"
+        f"Stated preferences/facts the user shared: {pref_txt}\n"
         f"Open tasks: {open_n}. Completed (recent): {len(done)}. "
         f"Currently overdue: {len(overdue)}.\n"
         f"Most active/completion hours: {active}.\n"
