@@ -16,7 +16,6 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.meeting import Meeting
 from app.models.task import Task, TaskHistory
 from app.models.user import User
 from app.services import memory_service
@@ -25,22 +24,18 @@ from app.services.llm import build_chat_client, llm
 TOOLS = [
     {"type": "function", "function": {
         "name": "create_task",
-        "description": "Add a to-do task for the user.",
+        "description": "Add a task for the user — a to-do OR a timed thing like a "
+        "meeting, call, or appointment. For anything that happens at a set time, "
+        "put that time in `when`.",
         "parameters": {"type": "object", "properties": {
             "title": {"type": "string"},
             "reason": {"type": "string", "description": "why it matters (optional)"},
             "priority": {"type": "integer", "description": "1 critical .. 4 low"},
-            "deadline": {"type": "string", "description": "ISO 8601 datetime or empty"},
+            "when": {"type": "string", "description": "ISO 8601 datetime it's due or "
+                     "happens at, or empty for an open to-do"},
+            "force": {"type": "boolean", "description": "set true ONLY after the user "
+                      "confirms adding despite a time clash with another task"},
         }, "required": ["title"]}}},
-    {"type": "function", "function": {
-        "name": "create_meeting",
-        "description": "Put a meeting or event on the user's calendar.",
-        "parameters": {"type": "object", "properties": {
-            "title": {"type": "string"},
-            "starts_at": {"type": "string", "description": "ISO 8601 datetime"},
-            "force": {"type": "boolean", "description": "set true ONLY after the "
-                      "user confirms adding despite a scheduling conflict"},
-        }, "required": ["title", "starts_at"]}}},
     {"type": "function", "function": {
         "name": "complete_task",
         "description": "Mark an existing task as done. Call this WHENEVER the user "
@@ -70,15 +65,50 @@ def _parse_dt(s: str | None, now: datetime) -> datetime | None:
         return None
 
 
+def _fmt_local(dt: datetime, user: User, fmt: str = "%a %H:%M") -> str:
+    try:
+        return dt.astimezone(ZoneInfo(user.timezone)).strftime(fmt)
+    except Exception:
+        return dt.strftime(fmt)
+
+
+def _has_clock_time(dt: datetime | None) -> bool:
+    """True if the datetime carries a specific time-of-day (not midnight) — the
+    signal that a task is a scheduled event, so it earns a pre-alert + clash
+    check. A date-only/open to-do just gets accountability nudges."""
+    return dt is not None and (dt.hour != 0 or dt.minute != 0)
+
+
 async def _create_task(db, user, now, args) -> str:
     title = (args.get("title") or "").strip()
     if not title:
         return "No title given."
     prio = args.get("priority")
     prio = prio if isinstance(prio, int) and 1 <= prio <= 4 else 3
+    # `when` is the new name; accept `deadline`/`starts_at` for compatibility.
+    when = _parse_dt(
+        args.get("when") or args.get("deadline") or args.get("starts_at"), now)
+    timed = _has_clock_time(when)
+    rolled = False
+    if timed and when < now:  # time already passed today -> assume next day
+        when = when + timedelta(days=1)
+        rolled = True
+    # Clash check for timed tasks: warn instead of silently double-booking.
+    if timed and not args.get("force"):
+        window = timedelta(minutes=20)
+        clash = await db.scalar(select(Task).where(
+            Task.user_id == user.id, Task.status != "completed",
+            Task.deadline.is_not(None),
+            Task.deadline >= when - window,
+            Task.deadline <= when + window).limit(1))
+        if clash is not None:
+            return (f'CONFLICT: the user already has "{clash.title}" at '
+                    f"{_fmt_local(clash.deadline, user, '%H:%M')}. Tell them about "
+                    "this clash and ask if they still want both; only if they "
+                    "confirm, call create_task again with force=true.")
     task = Task(user_id=user.id, title=title, reason=args.get("reason") or None,
                 priority=prio, importance="high" if prio == 1 else "medium",
-                deadline=_parse_dt(args.get("deadline"), now))
+                deadline=when)
     task.history.append(TaskHistory(event="created"))
     db.add(task)
     await db.flush()
@@ -88,41 +118,10 @@ async def _create_task(db, user, now, args) -> str:
         source_type="task", source_id=task.id, commit=False)
     task.embedding_id = mem.id
     await db.commit()
+    if timed:
+        note = " (that time today had passed, so I set the next day)" if rolled else ""
+        return f'Added "{title}" for {_fmt_local(when, user)}.{note}'
     return f'Created task "{title}".'
-
-
-async def _create_meeting(db, user, now, args) -> str:
-    title = (args.get("title") or "").strip()
-    starts = _parse_dt(args.get("starts_at"), now)
-    if not title or not starts:
-        return "Need a title and a time."
-    rolled = False
-    if starts < now:  # requested time already passed today -> next day
-        starts = starts + timedelta(days=1)
-        rolled = True
-    # Conflict check: warn instead of silently double-booking.
-    if not args.get("force"):
-        window = timedelta(minutes=20)
-        clash = await db.scalar(select(Meeting).where(
-            Meeting.user_id == user.id,
-            Meeting.starts_at >= starts - window,
-            Meeting.starts_at <= starts + window).limit(1))
-        if clash is not None:
-            try:
-                cw = clash.starts_at.astimezone(ZoneInfo(user.timezone)).strftime("%H:%M")
-            except Exception:
-                cw = clash.starts_at.strftime("%H:%M")
-            return (f'CONFLICT: the user already has "{clash.title}" at {cw}. Tell '
-                    "them about this clash and ask if they still want both; only if "
-                    "they confirm, call create_meeting again with force=true.")
-    db.add(Meeting(user_id=user.id, title=title, starts_at=starts))
-    await db.commit()
-    try:
-        when = starts.astimezone(ZoneInfo(user.timezone)).strftime("%a %d %b %H:%M")
-    except Exception:
-        when = starts.strftime("%a %d %b %H:%M")
-    note = " (that time had passed today, so I scheduled the next day)" if rolled else ""
-    return f'Added meeting "{title}" at {when}.{note}'
 
 
 async def _complete_task(db, user, now, args) -> str:
@@ -144,7 +143,6 @@ async def _complete_task(db, user, now, args) -> str:
 
 _EXECUTORS = {
     "create_task": _create_task,
-    "create_meeting": _create_meeting,
     "complete_task": _complete_task,
 }
 
@@ -177,15 +175,10 @@ async def run(
 
     tasks = list(await db.scalars(
         select(Task).where(Task.user_id == user.id, Task.status != "completed")
-        .order_by(Task.priority).limit(8)))
+        .order_by(Task.priority).limit(10)))
     task_lines = "; ".join(
-        f"P{t.priority} {t.title}" + (f" (due {_loc(t.deadline)})" if t.deadline else "")
+        f"P{t.priority} {t.title}" + (f" (at {_loc(t.deadline)})" if t.deadline else "")
         for t in tasks) or "none"
-    upcoming = list(await db.scalars(
-        select(Meeting).where(Meeting.user_id == user.id,
-                              Meeting.starts_at >= now - timedelta(hours=1))
-        .order_by(Meeting.starts_at).limit(6)))
-    mtg_lines = "; ".join(f"{_loc(m.starts_at)} {m.title}" for m in upcoming) or "none"
 
     system = (
         f"You are {user.assistant_name}, {user.display_name}'s executive assistant. "
@@ -193,20 +186,23 @@ async def run(
         "LANGUAGE (most important): reply in the EXACT language of the user's latest "
         "message. Hinglish in -> Hinglish out; Hindi -> Hindi; English -> English. "
         "Never switch to English when they wrote Hindi/Hinglish.\n"
+        "EVERYTHING IS A TASK: a to-do and a meeting/call/appointment are both just "
+        "tasks. Use create_task for all of them — put a specific time in `when` for "
+        "anything that happens at a set time, leave it empty for an open to-do.\n"
         "REASON like a PA: use the Current state and recent conversation to be "
-        "genuinely useful — connect a new request to their existing tasks/meetings, "
-        "flag clashes, tight timing, or prep needed, and check in on the status of "
+        "genuinely useful — connect a new request to their existing tasks, flag "
+        "clashes, tight timing, or prep needed, and check in on the status of "
         "pending things when relevant. Ask ONE smart clarifying question when the "
         "request is ambiguous or missing a needed detail; otherwise just act.\n"
         "ACT: to add/schedule/complete something, call the tool and confirm it's "
         "DONE — don't ask 'would you like me to…'. When they say they finished/did/"
-        "completed something, call complete_task. A timed meeting/task IS its own "
-        "reminder. If create_meeting reports a CONFLICT, tell them and ask before "
+        "completed something, call complete_task. A task with a time IS its own "
+        "reminder. If create_task reports a CONFLICT, tell them and ask before "
         "adding both. If a time already passed today, use the next day.\n"
         "Don't blindly repeat old titles/times from history, but DO use context to "
         "reason. Keep replies to 1-3 short sentences. Use their name rarely. Never "
         f"invent facts. Now: {now.isoformat()} (year {now.year}; never a past year).\n\n"
-        f"Current state —\nTasks: {task_lines}\nUpcoming meetings: {mtg_lines}\n\n"
+        f"Current state —\nTasks: {task_lines}\n\n"
         f"Relevant memory:\n{context}"
     )
 

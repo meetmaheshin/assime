@@ -12,10 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.models.meeting import Meeting
 from app.models.task import Task
 from app.models.user import User
-from app.schemas.meeting import MeetingOut
 from app.schemas.task import TaskOut
 
 router = APIRouter(tags=["planning"])
@@ -42,13 +40,15 @@ async def today(
         )
     )
     overdue = [t for t in open_tasks if t.deadline and t.deadline < now]
-    meetings = list(await db.scalars(
-        select(Meeting).where(
-            Meeting.user_id == user.id,
-            Meeting.starts_at >= day_start,
-            Meeting.starts_at < day_end,
-        ).order_by(Meeting.starts_at)
-    ))
+    # Tasks happening at a set time today (the old "meetings" view). Localize the
+    # UTC deadline before deciding it has a specific time-of-day.
+    def _timed(t: Task) -> bool:
+        if not (t.deadline and day_start <= t.deadline < day_end):
+            return False
+        loc = t.deadline.astimezone(local.tzinfo)
+        return bool(loc.hour or loc.minute)
+    scheduled = sorted(
+        (t for t in open_tasks if _timed(t)), key=lambda t: t.deadline)
     hour = local.hour
     part = "morning" if hour < 12 else "afternoon" if hour < 17 else "evening"
 
@@ -56,6 +56,6 @@ async def today(
         "greeting": f"Good {part}, {user.display_name}.",
         "priorities": [TaskOut.model_validate(t) for t in open_tasks[:3]],
         "overdue": [TaskOut.model_validate(t) for t in overdue],
-        "meetings": [MeetingOut.model_validate(m) for m in meetings],
+        "scheduled": [TaskOut.model_validate(t) for t in scheduled],
         "open_count": len(open_tasks),
     }

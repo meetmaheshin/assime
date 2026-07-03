@@ -303,7 +303,7 @@
               <li>Unlimited voice capture &amp; replies</li>
               <li>Proactive call-style reminders</li>
               <li>Long-term memory &amp; accountability</li>
-              <li>Daily briefings, meetings &amp; reviews</li>
+              <li>Daily briefings &amp; reviews</li>
             </ul>
             <button class="pbtn" id="upgradeBtn">Upgrade</button>
           </div>
@@ -500,9 +500,10 @@ async function loadToday(){
     $("#overdueBanner").innerHTML = t.overdue.length
       ? `<div class="banner">⚠️ <b>${h(t.overdue[0].title)}</b> is overdue. What happened?</div>` : "";
     const mb=$("#meetingsBox");
-    if(t.meetings && t.meetings.length){
-      mb.innerHTML='<div class="h">Meetings today</div>'+t.meetings.map(m=>{
-        const hh=new Date(m.starts_at).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+    const sched=t.scheduled||[];
+    if(sched.length){
+      mb.innerHTML='<div class="h">Scheduled today</div>'+sched.map(m=>{
+        const hh=new Date(m.deadline).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
         return `<div class="meeting"><span class="mt">${hh}</span><span>${h(m.title)}</span></div>`;
       }).join("");
     } else mb.innerHTML="";
@@ -516,6 +517,14 @@ async function loadToday(){
     }
   }catch(e){console.error(e);}
 }
+function fmtWhen(iso){
+  const d=new Date(iso);
+  const date=d.toLocaleDateString([], {month:"short",day:"numeric"});
+  // Show the time too, unless it's local midnight (a date-only to-do).
+  if(d.getHours()||d.getMinutes())
+    return date+" "+d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+  return date;
+}
 function renderPriorities(list){
   const box=$("#priorities");
   if(!list.length){box.innerHTML='<div class="muted">Nothing yet — add a task.</div>';return;}
@@ -524,7 +533,7 @@ function renderPriorities(list){
     const el=document.createElement("div"); el.className="task";
     el.innerHTML=`<div class="t-title">${h(t.title)}</div>
       <div class="t-meta"><span class="dot p${t.priority}"></span>P${t.priority}
-      ${t.reason?`· 🎯 ${h(t.reason)}`:""}${t.deadline?`· 📅 ${t.deadline.slice(0,10)}`:""}</div>
+      ${t.reason?`· 🎯 ${h(t.reason)}`:""}${t.deadline?`· 📅 ${fmtWhen(t.deadline)}`:""}</div>
       <div class="t-actions"><button class="btn-sm btn-done" data-id="${t.id}">✓ Mark done</button></div>`;
     el.querySelector("button").onclick=async ev=>{await api(`/tasks/${ev.target.dataset.id}/complete`,{method:"POST"});loadToday();};
     box.appendChild(el);

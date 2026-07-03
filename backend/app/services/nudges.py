@@ -13,12 +13,21 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.meeting import Meeting
 from app.models.notification import Notification
 from app.models.task import Task
 from app.models.user import User
 
 DAILY_CAP = 6  # never spam
+
+
+def _has_clock_time(dt: datetime | None, tz: str) -> bool:
+    """A task with a specific time-of-day (not midnight, in the user's zone) is a
+    scheduled event and earns a call-style pre-alert, like a meeting used to.
+    Deadlines come back from the DB in UTC, so localize before checking."""
+    if dt is None:
+        return False
+    local = _local(dt, tz)
+    return local.hour != 0 or local.minute != 0
 
 
 def _local(now: datetime, tz: str) -> datetime:
@@ -58,13 +67,14 @@ async def generate(
     ).astimezone(timezone.utc)
 
     day_end_utc = day_start_utc + timedelta(days=1)
-    meetings = list(await db.scalars(
-        select(Meeting).where(
-            Meeting.user_id == user.id,
-            Meeting.starts_at >= day_start_utc,
-            Meeting.starts_at < day_end_utc,
-        ).order_by(Meeting.starts_at)
-    ))
+    open_tasks = list(await db.scalars(
+        select(Task).where(Task.user_id == user.id, Task.status != "completed")
+        .order_by(Task.priority)))
+    # Tasks happening at a set time today earn meeting-style pre-alerts.
+    timed_today = [t for t in open_tasks
+                   if _has_clock_time(t.deadline, user.timezone)
+                   and day_start_utc <= t.deadline < day_end_utc]
+    timed_today.sort(key=lambda t: t.deadline)
 
     sent_today = await db.scalar(
         select(func.count(Notification.id)).where(
@@ -86,28 +96,28 @@ async def generate(
         created.append(n)
         budget -= 1
 
-    # ── Meeting reminders — time-critical, so they bypass quiet hours ──
-    for m in meetings:
-        mins = (m.starts_at - now).total_seconds() / 60.0
+    # ── Timed-task reminders — time-critical, so they bypass quiet hours ──
+    for t in timed_today:
+        mins = (t.deadline - now).total_seconds() / 60.0
         if 3 <= mins <= 15:
-            kind = "meeting_soon"
+            kind = "task_soon"
         elif -4 <= mins < 3:
-            kind = "meeting_now"
+            kind = "task_now"
         else:
             continue
         if budget <= 0:
             break
         already = await db.scalar(select(Notification.id).where(
             Notification.user_id == user.id, Notification.kind == kind,
-            Notification.meeting_id == m.id))
+            Notification.task_id == t.id))
         if already:
             continue
-        whenstr = _local(m.starts_at, user.timezone).strftime("%H:%M")
-        body = (f"Your meeting “{m.title}” is starting now ({whenstr})."
-                if kind == "meeting_now"
-                else f"Meeting “{m.title}” at {whenstr} — in {int(round(mins))} min.")
-        n = Notification(user_id=user.id, kind=kind, title="Meeting reminder",
-                         body=body, alert_level="call", meeting_id=m.id)
+        whenstr = _local(t.deadline, user.timezone).strftime("%H:%M")
+        body = (f"“{t.title}” is happening now ({whenstr})."
+                if kind == "task_now"
+                else f"“{t.title}” at {whenstr} — in {int(round(mins))} min.")
+        n = Notification(user_id=user.id, kind=kind, title="Reminder",
+                         body=body, alert_level="call", task_id=t.id)
         db.add(n)
         created.append(n)
         budget -= 1
@@ -115,9 +125,6 @@ async def generate(
     # ── Everything else respects quiet hours ──
     if budget > 0 and (force or not _in_quiet_hours(
             hour, user.quiet_hours_start, user.quiet_hours_end)):
-        open_tasks = list(await db.scalars(
-            select(Task).where(Task.user_id == user.id, Task.status != "completed")
-            .order_by(Task.priority)))
         overdue = [t for t in open_tasks if t.deadline and t.deadline < now]
         overdue_ids = {t.id for t in overdue}
         due_today = [
@@ -134,16 +141,16 @@ async def generate(
                       f"“{t.title}” is due today. Still on track?", t.id,
                       alert="call" if t.priority == 1 else "normal")
         if force or (user.morning_hour <= hour < 12):
-            if meetings:
-                def _fmt(m):
-                    return f"{_local(m.starts_at, user.timezone):%H:%M} {m.title}"
-                mtg = "Today's meetings: " + "; ".join(_fmt(m) for m in meetings) + "."
+            if timed_today:
+                sched = "Today's schedule: " + "; ".join(
+                    f"{_local(t.deadline, user.timezone):%H:%M} {t.title}"
+                    for t in timed_today) + "."
             else:
-                mtg = "I don't see any meetings today — what's on your calendar?"
+                sched = "Nothing scheduled at a set time today."
             top = ", ".join(t.title for t in open_tasks[:3])
             pend = f" Pending: {top}." if top else " Nothing pending — nice."
             await add("morning_brief", f"Good morning, {user.display_name}",
-                      mtg + pend + " Want to start with the top one?", alert="call")
+                      sched + pend + " Want to start with the top one?", alert="call")
         if force or (user.evening_hour <= hour < 23):
             await add("evening_review", "Evening review",
                       "What did you complete today? Anything to move to tomorrow?")

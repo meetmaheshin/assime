@@ -1,7 +1,6 @@
 """User-scoped task CRUD with duplicate detection, completion, and overdue reasons."""
-import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,7 +10,6 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.models.meeting import Meeting
 from app.models.task import Task, TaskHistory
 from app.models.user import User
 from app.schemas.capture import CaptureDraft, CaptureRequest, CaptureResponse
@@ -32,11 +30,6 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 _VALID_REASONS = {
     "blocked", "forgot", "too_busy", "waiting", "not_important", "other",
 }
-
-# Utterances that mean "put an event on my calendar", not "add a to-do".
-_MEETING_RE = re.compile(
-    r"\b(meeting|meet with|sync|stand\s?up|1:1|one[ -]on[ -]one|appointment|"
-    r"interview|catch\s?up|(coffee|lunch|dinner)\b|call with|call at)\b", re.I)
 
 
 async def _get_owned(db: AsyncSession, user: User, task_id: uuid.UUID) -> Task:
@@ -183,22 +176,6 @@ async def capture_task(
         draft.pending = None
     else:
         fields = await capture_svc.extract_fields(llm, utter, now)
-        # Calendar intent → create a meeting (no "why" needed) and return.
-        if answering is None and _MEETING_RE.search(utter):
-            starts = fields["deadline"] or (
-                now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
-            title = fields["title"] or "Meeting"
-            meeting = Meeting(user_id=user.id, title=title, starts_at=starts,
-                              notes=fields["reason"])
-            db.add(meeting)
-            await db.commit()
-            await db.refresh(meeting)
-            try:
-                when = starts.astimezone(ZoneInfo(user.timezone)).strftime("%a %H:%M")
-            except Exception:
-                when = starts.strftime("%a %H:%M")
-            return CaptureResponse(action="created", draft=draft, created_kind="meeting",
-                                   message=f"Added to your calendar: {title} at {when}.")
         if answering == "title":
             draft.title = fields["title"] or utter or "New task"
         else:

@@ -13,7 +13,6 @@ from sqlalchemy import func, select
 
 from app.core.database import SessionLocal
 from app.core.security import hash_password
-from app.models.meeting import Meeting
 from app.models.project import Project
 from app.models.task import Task, TaskHistory
 from app.models.user import User
@@ -69,24 +68,26 @@ async def _create_user(db) -> User:
     return user
 
 
-async def _ensure_meetings_today(db, user: User) -> None:
+async def _ensure_timed_tasks_today(db, user: User) -> None:
+    """Everything is a task — seed a couple of timed ones (the old 'meetings')."""
     local_now = datetime.now(ZoneInfo(TZ))
     day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
     day_end = day_start + timedelta(days=1)
-    count = await db.scalar(select(func.count(Meeting.id)).where(
-        Meeting.user_id == user.id, Meeting.starts_at >= day_start,
-        Meeting.starts_at < day_end))
+    count = await db.scalar(select(func.count(Task.id)).where(
+        Task.user_id == user.id, Task.deadline >= day_start,
+        Task.deadline < day_end))
     if count:
         return
     def at(h, m=0):
         return local_now.replace(hour=h, minute=m, second=0, microsecond=0).astimezone(timezone.utc)
-    db.add_all([
-        Meeting(user_id=user.id, title="Client call — Furmacie launch", starts_at=at(10, 30),
-                notes="Confirm homepage + go-live checklist"),
-        Meeting(user_id=user.id, title="Standup", starts_at=at(15, 0)),
-    ])
+    for title, when in [
+        ("Client call — Furmacie launch", at(10, 30)),
+        ("Standup", at(15, 0)),
+    ]:
+        db.add(Task(user_id=user.id, title=title, deadline=when,
+                    priority=2, importance="medium"))
     await db.commit()
-    print("Added 2 meetings for today.")
+    print("Added 2 timed tasks for today.")
 
 
 async def main() -> None:
@@ -96,7 +97,7 @@ async def main() -> None:
             user = await _create_user(db)
         else:
             print(f"Demo user already exists: {DEMO_EMAIL} / {DEMO_PASSWORD}")
-        await _ensure_meetings_today(db, user)
+        await _ensure_timed_tasks_today(db, user)
 
 
 if __name__ == "__main__":

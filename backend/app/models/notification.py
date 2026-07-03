@@ -24,19 +24,13 @@ class Notification(Base, UUIDMixin, TimestampMixin):
         index=True,
         nullable=False,
     )
-    # morning_brief | evening_review | overdue | due_today | followup
+    # morning_brief | evening_review | overdue | due_today | task_soon | task_now
     kind: Mapped[str] = mapped_column(String(24), index=True, nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     task_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("tasks.id", ondelete="CASCADE"),
-        index=True,
-        nullable=True,
-    )
-    meeting_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("meetings.id", ondelete="CASCADE"),
         index=True,
         nullable=True,
     )
