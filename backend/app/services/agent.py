@@ -136,7 +136,9 @@ async def _complete_task(db, user, now, args) -> str:
     row.status = "completed"
     row.progress = 100
     row.completed_at = datetime.now(timezone.utc)
-    row.history.append(TaskHistory(event="completed"))
+    # Add history via the FK directly — appending to row.history would trigger an
+    # illegal async lazy-load (history wasn't eager-loaded on this query).
+    db.add(TaskHistory(task_id=row.id, event="completed"))
     await db.commit()
     return f'Marked "{row.title}" done.'
 

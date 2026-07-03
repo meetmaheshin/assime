@@ -93,11 +93,16 @@ async def chat(
                      "Your tasks and reminders still work — try me again in a moment.")
 
     # Persist both turns; recent turns feed short-term context, later summarized.
-    db.add_all([
-        ConversationTurn(user_id=user.id, role="user", content=payload.message),
-        ConversationTurn(user_id=user.id, role="assistant", content=reply),
-    ])
-    await db.commit()
+    # Never let a DB hiccup 500 the chat — the reply is already computed.
+    try:
+        db.add_all([
+            ConversationTurn(user_id=user.id, role="user", content=payload.message),
+            ConversationTurn(user_id=user.id, role="assistant", content=reply),
+        ])
+        await db.commit()
+    except Exception:
+        logging.exception("failed to persist conversation turns")
+        await db.rollback()
 
     # Keep raw conversation bounded: summarize + prune old turns when they pile up.
     try:
