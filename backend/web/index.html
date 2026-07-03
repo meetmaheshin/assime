@@ -324,6 +324,8 @@
             <label class="toggle"><span>Voice replies (AARTH speaks)</span><input type="checkbox" id="setVoice" checked /></label>
             <label class="toggle"><span>Push reminders (even when app is closed)</span><input type="checkbox" id="setPush" /></label>
             <button class="btn-sm" id="testPushBtn" style="width:100%">Send test reminder</button>
+            <button class="btn-sm" id="testNativeBtn" style="width:100%">🔔 Test phone alarm (10 sec)</button>
+            <div id="nativeStatus" class="muted" style="font-size:12px;min-height:14px"></div>
             <button class="btn-primary" id="saveSettings">Save settings</button>
             <div id="setStatus" class="muted" style="font-size:13px;min-height:16px"></div>
             <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
@@ -512,13 +514,19 @@ async function loadToday(){
 
 /* Native (Capacitor) on-device reminders — fire even when the app is closed or
    offline. No-op in a plain browser (window.Capacitor is undefined). */
+function getLN(){ return window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications; }
+function isNative(){ return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); }
 function _nId(uuid){ let h=0; for(const c of uuid) h=(h*31+c.charCodeAt(0))|0; return Math.abs(h)%1000000000; }
+async function ensureNativePerm(){
+  const LN=getLN(); if(!LN) return false;
+  let p=await LN.checkPermissions();
+  if(p.display!=="granted") p=await LN.requestPermissions();
+  return p.display==="granted";
+}
 async function syncNativeReminders(tasks){
-  const LN = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
-  if(!LN) return;
+  const LN=getLN(); if(!LN) return;
   try{
-    const perm = await LN.requestPermissions();
-    if(perm.display!=="granted") return;
+    if(!(await ensureNativePerm())) return;
     // Clear our previously-scheduled reminders, then reschedule from live tasks.
     const pend = await LN.getPending();
     if(pend.notifications && pend.notifications.length)
@@ -530,13 +538,30 @@ async function syncNativeReminders(tasks){
       if(!(d.getHours()||d.getMinutes())) return;        // only timed tasks get an alarm
       if(at<=now) return;
       const base=_nId(t.id);
-      out.push({id:base, title:"AARTH", body:`“${t.title}” — it's time.`, schedule:{at:new Date(at)}});
+      out.push({id:base, title:"AARTH", body:`“${t.title}” — it's time.`, schedule:{at:new Date(at), allowWhileIdle:true}});
       if(at-now > 11*60000)                              // 10-min heads-up if far enough out
-        out.push({id:base+1000000000, title:"AARTH", body:`“${t.title}” in 10 minutes.`, schedule:{at:new Date(at-10*60000)}});
+        out.push({id:base+1000000000, title:"AARTH", body:`“${t.title}” in 10 minutes.`, schedule:{at:new Date(at-10*60000), allowWhileIdle:true}});
     });
     if(out.length) await LN.schedule({notifications:out});
   }catch(e){ console.warn("native reminders failed", e); }
 }
+async function showNativeStatus(){
+  const el=$("#nativeStatus"); if(!el) return;
+  const LN=getLN();
+  if(!LN){ el.textContent = isNative()? "Native app detected, but notifications plugin missing." : "Running in browser — install the AARTH app for phone alarms."; return; }
+  try{ const p=await LN.checkPermissions(); el.textContent = "Native app ✓ · notifications: "+p.display; }
+  catch(e){ el.textContent="Native app ✓ · permission check failed"; }
+}
+$("#testNativeBtn").onclick=async()=>{
+  const el=$("#nativeStatus"); const LN=getLN();
+  if(!LN){ el.textContent="Not in the AARTH app — open the installed app to test phone alarms."; toast("Open the installed app to test."); return; }
+  if(!(await ensureNativePerm())){ el.textContent="Notification permission denied — enable it in phone settings."; return; }
+  try{
+    await LN.schedule({notifications:[{id: 999001, title:"AARTH test", body:"This is a test alarm — fired ✓", schedule:{at:new Date(Date.now()+10000), allowWhileIdle:true}}]});
+    el.textContent="Scheduled ✓ — close the app now; it should buzz in ~10 seconds.";
+    toast("Test alarm in 10s — you can close the app.");
+  }catch(e){ el.textContent="Schedule failed: "+(e.message||e); }
+};
 function fmtWhen(iso){
   const d=new Date(iso);
   const date=d.toLocaleDateString([], {month:"short",day:"numeric"});
@@ -885,6 +910,7 @@ async function loadSettings(){
   $("#setPush").checked = (localStorage.getItem("aath_push")==="on") &&
     ("Notification" in window) && Notification.permission==="granted";
   $("#setStatus").textContent="";
+  showNativeStatus();
   try{ const hv=await api("/health"); $("#appVersion").textContent="Version: "+(hv.version||"?"); }catch(_){}
 }
 $("#settingsBtn").onclick=()=>{ showTab("settings"); loadSettings(); };

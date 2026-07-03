@@ -35,7 +35,7 @@ class User(Base, UUIDMixin, TimestampMixin):
     quiet_hours_start: Mapped[int] = mapped_column(default=22, nullable=False)  # 0-23
     quiet_hours_end: Mapped[int] = mapped_column(default=7, nullable=False)  # 0-23
     morning_hour: Mapped[int] = mapped_column(default=8, nullable=False)  # briefing time
-    evening_hour: Mapped[int] = mapped_column(default=18, nullable=False)  # review time
+    evening_hour: Mapped[int] = mapped_column(default=20, nullable=False)  # review time (8pm)
     # When False, call-level nudges don't ring/vibrate (still show as a badge).
     ring_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 

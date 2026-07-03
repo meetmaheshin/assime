@@ -159,8 +159,17 @@ async def generate(
             await add("morning_brief", f"Good morning, {user.display_name}",
                       sched + pend + " Want to start with the top one?", alert="call")
         if force or (user.evening_hour <= hour < 23):
-            await add("evening_review", "Evening review",
-                      "What did you complete today? Anything to move to tomorrow?")
+            titles = [t.title for t in open_tasks]
+            if titles:
+                shown = "; ".join(f"“{x}”" for x in titles[:6])
+                more = f" (+{len(titles) - 6} more)" if len(titles) > 6 else ""
+                body = (f"Time for today's review. You still have {len(titles)} open: "
+                        f"{shown}{more}. Which did you get done, and what should I "
+                        "carry over to tomorrow?")
+            else:
+                body = ("Time for today's review — nothing left open, nice work. "
+                        "Anything you want to line up for tomorrow?")
+            await add("evening_review", "Evening review", body, alert="call")
 
     if created:
         await db.commit()
