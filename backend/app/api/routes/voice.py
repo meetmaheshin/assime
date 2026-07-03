@@ -22,10 +22,10 @@ async def voice_status() -> dict:
         "stt": settings.resolved_stt_provider,
         "deepgram_key_set": bool(settings.deepgram_api_key),
         "stt_provider_setting": settings.stt_provider,
-        "deepgram_model": settings.deepgram_model,
+        "deepgram_model": settings.resolved_deepgram_model,
         "deepgram_language": settings.deepgram_language,
         "tts": "cartesia" if settings.voice_enabled else "none",
-        "tts_model": settings.cartesia_tts_model,
+        "tts_model": settings.resolved_tts_model,
     }
 
 

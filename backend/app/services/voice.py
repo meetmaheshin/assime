@@ -47,7 +47,7 @@ class VoiceError(RuntimeError):
 
 def _tts_payload(text: str) -> dict:
     return {
-        "model_id": settings.cartesia_tts_model,
+        "model_id": settings.resolved_tts_model,
         "transcript": text,
         "voice": {"mode": "id", "id": settings.cartesia_voice_id},
         "output_format": {
@@ -91,7 +91,7 @@ async def _deepgram_stt(audio: bytes, content_type: str) -> str:
     # bare container type, and the codecs param can trip it up.
     ct = (content_type or "audio/webm").split(";")[0].strip() or "audio/webm"
     params = {
-        "model": settings.deepgram_model,
+        "model": settings.resolved_deepgram_model,
         "language": settings.deepgram_language,
         "smart_format": "true",
         "punctuate": "true",

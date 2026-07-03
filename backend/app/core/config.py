@@ -116,6 +116,22 @@ class Settings(BaseSettings):
         if self.stt_provider != "auto":
             return self.stt_provider
         return "deepgram" if self.deepgram_api_key else "cartesia"
+
+    @property
+    def resolved_deepgram_model(self) -> str:
+        """nova-2 can't do multilingual Hindi (it drops it) — upgrade to nova-3
+        whenever code-switching (`multi`) is requested. Guards against a stale
+        DEEPGRAM_MODEL=nova-2 lingering in the deployment env."""
+        if self.deepgram_language == "multi" and self.deepgram_model == "nova-2":
+            return "nova-3"
+        return self.deepgram_model
+
+    @property
+    def resolved_tts_model(self) -> str:
+        """Cartesia sunsetted sonic-2/sonic/sonic-english — map any of them (or a
+        stale env value) to the current sonic-3 so TTS never silently fails."""
+        sunset = {"sonic-2", "sonic", "sonic-english", "sonic-2-2025-03-07"}
+        return "sonic-3" if self.cartesia_tts_model in sunset else self.cartesia_tts_model
     # Default voice: "Priya — Trusted Operator" (Indian-accent female).
     cartesia_voice_id: str = "f6141af3-5f94-418c-80ed-a45d450e7e2e"
 
