@@ -506,6 +506,24 @@ async function enterApp(){
   if(notifTimer) clearInterval(notifTimer);
   notifTimer=setInterval(loadNotifications, 30000);  // proactive polling
   maybeTour();  // one-time first-login walkthrough
+  initWidgetLinks();  // home-screen widget deep links
+}
+
+/* Home-screen widget deep links (aarth://action/add|voice|open) → open chat. */
+let _widgetHooked=false;
+function handleWidgetAction(url){
+  if(!url || !token) return;
+  showTab("chat");
+  if(url.indexOf("voice")>=0){ const m=$("#micBtn"); if(m) setTimeout(()=>m.click(),450); }
+  else { const ci=$("#chatInput"); if(ci) setTimeout(()=>ci.focus(),200); }
+}
+function initWidgetLinks(){
+  const App = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+  if(!App) return;
+  if(!_widgetHooked){ _widgetHooked=true;
+    try{ App.addListener("appUrlOpen", e=>handleWidgetAction(e && e.url)); }catch(_){}
+  }
+  try{ App.getLaunchUrl().then(r=>{ if(r&&r.url) handleWidgetAction(r.url); }).catch(()=>{}); }catch(_){}
 }
 
 /* First-login walkthrough — highlights the few things that matter, once ever. */
