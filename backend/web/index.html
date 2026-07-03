@@ -132,8 +132,6 @@
   .callbtn.hang::before{transform:rotate(135deg)}
   .callbtn.snooze{color:var(--warn)}
   .callbtn.snooze::before{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M12 7v5l3 2'/%3E%3Ccircle cx='12' cy='12' r='9' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E");mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='white' stroke-width='2' stroke-linecap='round' d='M12 7v5l3 2'/%3E%3Ccircle cx='12' cy='12' r='9' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E")}
-  .meeting{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:center;font-size:14px}
-  .meeting .mt{font-weight:700;color:var(--accent);min-width:52px}
   .slabel{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
   .toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:13px 14px}
   .toggle input{width:20px;height:20px;accent-color:var(--accent)}
@@ -229,7 +227,6 @@
           <div class="muted" id="briefSub" style="font-size:14px;margin-bottom:16px">Loading…</div>
 
           <div id="overdueBanner"></div>
-          <div id="meetingsBox"></div>
           <div class="h">Your tasks</div>
           <div id="priorities"><div class="muted">Nothing yet.</div></div>
         </div>
@@ -499,14 +496,8 @@ async function loadToday(){
     $("#briefSub").textContent=bits.length?bits.join(" · "):"You're all clear. Nice.";
     $("#overdueBanner").innerHTML = t.overdue.length
       ? `<div class="banner">⚠️ <b>${h(t.overdue[0].title)}</b> is overdue. What happened?</div>` : "";
-    const mb=$("#meetingsBox");
-    const sched=t.scheduled||[];
-    if(sched.length){
-      mb.innerHTML='<div class="h">Scheduled today</div>'+sched.map(m=>{
-        const hh=new Date(m.deadline).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
-        return `<div class="meeting"><span class="mt">${hh}</span><span>${h(m.title)}</span></div>`;
-      }).join("");
-    } else mb.innerHTML="";
+    // One unified format: task cards (with reason + Mark done). Timed tasks show
+    // their time on the card, so no separate "scheduled" strip is needed.
     // Show ALL open tasks (not just the top 3) so nothing you add is hidden.
     let all=[]; try{ all=await api("/tasks"); }catch(_){ all=t.priorities; }
     const open=all.filter(x=>x.status!=="completed")

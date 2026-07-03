@@ -18,6 +18,7 @@ from app.models.task import Task
 from app.models.user import User
 
 DAILY_CAP = 6  # never spam
+CREATE_GRACE = timedelta(hours=3)  # don't nag about a just-added task
 
 
 def _has_clock_time(dt: datetime | None, tz: str) -> bool:
@@ -125,10 +126,14 @@ async def generate(
     # ── Everything else respects quiet hours ──
     if budget > 0 and (force or not _in_quiet_hours(
             hour, user.quiet_hours_start, user.quiet_hours_end)):
-        overdue = [t for t in open_tasks if t.deadline and t.deadline < now]
+        # Grace period: never nag about a task the user just added — a real PA
+        # gives it room before asking "still on track?".
+        fresh = now - CREATE_GRACE
+        settled = [t for t in open_tasks if t.created_at and t.created_at < fresh]
+        overdue = [t for t in settled if t.deadline and t.deadline < now]
         overdue_ids = {t.id for t in overdue}
         due_today = [
-            t for t in open_tasks
+            t for t in settled
             if t.deadline and t.id not in overdue_ids
             and day_start_utc <= t.deadline < day_end_utc]
 
