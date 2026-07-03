@@ -62,6 +62,18 @@ async def my_profile(
     return {"summary": await profile_service.get_summary(db, user.id)}
 
 
+@router.post("/me/profile/refresh")
+async def refresh_profile(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Rebuild the learned profile now (used by the 'Refresh' button)."""
+    from app.services import profile_service
+    from app.services.llm import llm
+    await profile_service.refresh(db, llm, user)
+    return {"summary": await profile_service.get_summary(db, user.id)}
+
+
 @router.patch("/me/settings", response_model=UserOut)
 async def update_settings(
     payload: SettingsUpdate,
@@ -73,3 +85,54 @@ async def update_settings(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+@router.get("/me/export")
+async def export_data(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Everything AARTH holds about you — for portability/transparency."""
+    from app.models.conversation import ConversationTurn
+    from app.models.memory import Memory
+    from app.models.task import Task
+    from app.services import profile_service
+
+    tasks = list(await db.scalars(select(Task).where(Task.user_id == user.id)))
+    mems = list(await db.scalars(select(Memory).where(Memory.user_id == user.id)))
+    turns = list(await db.scalars(
+        select(ConversationTurn).where(ConversationTurn.user_id == user.id)
+        .order_by(ConversationTurn.created_at)))
+    return {
+        "account": {"email": user.email, "display_name": user.display_name,
+                    "assistant_name": user.assistant_name, "timezone": user.timezone},
+        "profile_summary": await profile_service.get_summary(db, user.id),
+        "tasks": [{"title": t.title, "reason": t.reason, "status": t.status,
+                   "priority": t.priority,
+                   "deadline": t.deadline.isoformat() if t.deadline else None,
+                   "created_at": t.created_at.isoformat()} for t in tasks],
+        "memories": [{"kind": m.kind, "content": m.content,
+                      "created_at": m.created_at.isoformat()} for m in mems],
+        "conversation": [{"role": t.role, "content": t.content,
+                          "created_at": t.created_at.isoformat()} for t in turns],
+    }
+
+
+@router.delete("/me/data", status_code=status.HTTP_204_NO_CONTENT)
+async def wipe_data(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Erase everything AARTH has learned + all tasks (keeps the account so the
+    user can start fresh). Their right to be forgotten."""
+    from sqlalchemy import delete as sqldelete
+
+    from app.models.conversation import ConversationTurn
+    from app.models.memory import Memory
+    from app.models.notification import Notification
+    from app.models.profile import UserProfile
+    from app.models.task import Task
+
+    for model in (Notification, ConversationTurn, Memory, UserProfile, Task):
+        await db.execute(sqldelete(model).where(model.user_id == user.id))
+    await db.commit()

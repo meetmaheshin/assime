@@ -337,6 +337,15 @@
             <button class="btn-primary" id="saveSettings">Save settings</button>
             <div id="setStatus" class="muted" style="font-size:13px;min-height:16px"></div>
             <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
+            <label class="slabel">What AARTH knows about you</label>
+            <div id="profileBox" class="muted" style="font-size:13px;line-height:1.5;white-space:pre-wrap;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:12px">Loading…</div>
+            <button class="btn-sm" id="refreshProfileBtn" style="width:100%">↻ Refresh what it's learned</button>
+            <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
+            <label class="slabel">Your data</label>
+            <div class="muted" style="font-size:13px;margin-top:-6px">Stored safely in your account — it follows you across devices and survives a reinstall.</div>
+            <button class="btn-sm" id="exportBtn" style="width:100%">Export my data</button>
+            <button class="btn-sm" id="wipeBtn" style="width:100%;border-color:var(--danger);color:var(--danger)">Delete all my data</button>
+            <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
             <label class="slabel">Add to home screen</label>
             <div class="muted" style="font-size:13px;margin-top:-6px">Install AARTH like an app — one tap from your home screen.</div>
             <button class="btn-sm" id="installBtn">Install AARTH</button>
@@ -370,7 +379,7 @@
 
     <nav class="bottomnav">
       <button class="nav active" data-tab="chat"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span>Chat</button>
-      <button class="nav" data-tab="today"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></span>Today</button>
+      <button class="nav" data-tab="today"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>Tasks</button>
     </nav>
 
     <!-- INCOMING CALL-STYLE REMINDER -->
@@ -477,7 +486,7 @@ function showTab(name){
   document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("active",s.id==="screen-"+name));
   document.querySelectorAll(".nav").forEach(n=>n.classList.toggle("active",n.dataset.tab===name));
   // Voice FAB lives on Home (thumb-reachable). Hide elsewhere.
-  $("#homeMic").classList.toggle("show", name==="today");
+  $("#homeMic").classList.remove("show");  // voice lives in the chat mic; no FAB on Tasks
   if(name!=="today") setCap("");
   if(name==="memory") $("#memQuery").focus();
 }
@@ -995,8 +1004,37 @@ async function loadSettings(){
     ("Notification" in window) && Notification.permission==="granted";
   $("#setStatus").textContent="";
   showNativeStatus();
+  loadProfile();
   try{ const hv=await api("/health"); $("#appVersion").textContent="Version: "+(hv.version||"?"); }catch(_){}
 }
+async function loadProfile(){
+  const box=$("#profileBox"); if(!box) return;
+  try{ const p=await api("/auth/me/profile");
+    box.textContent = (p.summary && p.summary.trim()) ? p.summary
+      : "Still getting to know you — chat and add a few tasks, then I'll build this.";
+  }catch(_){ box.textContent="Couldn't load right now."; }
+}
+$("#refreshProfileBtn").onclick=async()=>{
+  const box=$("#profileBox"); box.textContent="Thinking about what I've learned…";
+  try{ const p=await api("/auth/me/profile/refresh",{method:"POST"});
+    box.textContent = (p.summary&&p.summary.trim())? p.summary : "Not enough yet — add a few tasks first.";
+  }catch(_){ box.textContent="Couldn't refresh right now."; }
+};
+$("#exportBtn").onclick=async()=>{
+  try{ const data=await api("/auth/me/export");
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download="aarth-my-data.json"; a.click(); URL.revokeObjectURL(a.href);
+    toast("Exported your data");
+  }catch(e){ toast("Export failed"); }
+};
+$("#wipeBtn").onclick=async()=>{
+  if(!confirm("Delete ALL your tasks, memories and everything AARTH has learned? Your account stays, but this can't be undone.")) return;
+  try{ await api("/auth/me/data",{method:"DELETE"});
+    $("#chatlog").innerHTML=""; try{ shownChat.clear(); }catch(_){}
+    toast("All your data was deleted"); loadProfile(); loadToday();
+  }catch(e){ toast("Delete failed"); }
+};
 $("#settingsBtn").onclick=()=>{ showTab("settings"); loadSettings(); };
 $("#setPush").onchange=async(e)=>{
   if(e.target.checked){ e.target.checked = await enablePush(); }
