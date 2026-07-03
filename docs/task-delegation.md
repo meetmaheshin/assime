@@ -1,29 +1,46 @@
 # AARTH — Task Delegation (Cross-User Tasks) — Design Doc
 
-Status: **Proposal / for review** · Owner: product · Last updated: 2026-07-03
+Status: **Decisions locked · Phase 1 ready to build** · Last updated: 2026-07-03
 
-Lets a user **assign a task to another person**, **track** it to completion, and
-**receive** tasks others assign to them — all conversationally ("ask Priya to send
-the deck by Friday") and through the Tasks screen.
+Lets a user **assign a task to a connected person**, **track** it to completion, and
+**receive** tasks people they've connected with assign to them — conversationally
+("ask Priya to send the deck by Friday") and via the Tasks screen.
 
-This is the feature that makes AARTH *multiplayer*: every person you delegate to is
-a reason for them to be on AARTH too (built-in growth), and it opens a clear
-team/B2B upgrade path.
+This makes AARTH *multiplayer*: connections + shared accountability drive growth and
+retention, and delegation is **subscription-gated on both sides**, so it directly
+pulls people into paying.
+
+---
+
+## 0. Confirmed decisions (product)
+
+1. **Connection-gated + auto-accept.** Only people you've **connected** with (one
+   sends a request, the other accepts) can assign you tasks — never a stranger.
+   Within an accepted connection, assignments **auto-accept** (no per-task approval).
+   Escape hatch: you can **Return** a specific task if it's not for you.
+2. **Reach:** connect registered users; if they're not on AARTH yet, **invite by
+   link** → they join → you connect. *(Confirmed OK.)*
+3. **Deadline control:** the **assignee can change the deadline**; the **delegator
+   gets a notification** of the change.
+4. **Both parties must be subscribed.** If the assignee isn't subscribed, assigned
+   tasks **pile up in a locked state** with "Subscribe to accept your tasks" — a
+   built-in conversion nudge. If the delegator isn't subscribed, they can't assign.
 
 ---
 
 ## 1. User stories
 
-- **Delegate:** "Ask Priya to send the investor deck by Friday." → AARTH creates the
-  task, assigns it to Priya, and I can see if she accepted, is on it, and finished.
-- **Receive:** Priya opens AARTH, sees *"Mahesh assigned you 'Send investor deck',
-  due Fri"*, taps **Accept**, and from then on it's a normal task in her list with
-  reminders/follow-ups — tagged **"from Mahesh."**
+- **Connect:** I search/invite Priya → send a connection request → she accepts. Now
+  we can assign each other tasks.
+- **Delegate:** "Ask Priya to send the investor deck by Friday." → it lands in
+  Priya's list automatically (we're connected), tagged **"from Mahesh."**
+- **Receive:** As Priya, connected tasks just appear in my list with reminders; I can
+  **Return** one if it's wrong. Tasks from non-connections never reach me.
 - **Track:** I have a **"Delegated by me"** view with each task's status
-  (Pending / Accepted / Done). I'm notified when Priya accepts, declines, or
-  completes it — and nudged if it's slipping so I can follow up.
-- **Decline:** If someone assigns me something I won't do, I can **decline** (they're
-  told), so nobody can dump work on me silently.
+  (In progress / Done / Returned). I'm notified when Priya finishes it, returns it,
+  or moves its deadline; I'm nudged if it's slipping so I can follow up.
+- **Paywall pull:** If Priya isn't subscribed, my assigned tasks stack up for her
+  behind "Subscribe to accept" — nudging her to upgrade.
 
 ---
 
@@ -31,225 +48,231 @@ team/B2B upgrade path.
 
 | Term | Meaning |
 |---|---|
-| **Delegator** | The user who assigns the task (a.k.a. assigner). |
-| **Assignee** | The user who must do it (the owner of the actual task). |
-| **Assignment** | The link + lifecycle between a delegator and an assignee for one task. |
-| **Acceptance** | The assignee agreeing to take it on (Pending → Accepted). |
+| **Connection** | A mutual, accepted link between two users; the trust boundary. |
+| **Delegator** | The user who assigns a task. |
+| **Assignee** | The user who does it (owner of the actual task). |
+| **Return** | Assignee handing a specific task back (declines that one task, stays connected). |
+| **Locked / piled-up** | An assigned task waiting because the assignee isn't subscribed. |
 
 ---
 
-## 3. Design principle (why it stays simple)
+## 3. Design principle
 
-**The assignee OWNS the task.** We keep AARTH's single-owner `Task` model: a
-delegated task lives in the *assignee's* list, so **all existing machinery just
-works for them** — reminders, the at-time ping, the accountability follow-up, the
-evening review, the learned profile. We only add a back-link to the delegator
-(`assigned_by_id`) and a small acceptance state.
+**The assignee owns the task** — a delegated task lives in the assignee's list, so
+all existing machinery (at-time ping, 1-hour follow-up, evening review, learned
+profile) works for them automatically. We add:
+- `connections` — the trust boundary + auto-accept.
+- `assigned_by_id` on the task — the back-link the delegator tracks by.
+- a small `assignment_status` — mainly to model the **locked (unsubscribed)** case.
 
-- **One source of truth** for status (the assignee's task).
-- The delegator gets a **read-only tracking view** (`Task WHERE assigned_by_id = me`)
-  — they never see any of the assignee's *other* data.
-
-This avoids a parallel "shared task" engine and reuses everything we've built.
+One source of truth for work status; the delegator sees a **read-only** tracking view
+and never any of the assignee's other data.
 
 ---
 
 ## 4. Data model
 
-### 4.1 Changes to `tasks`
+### 4.1 New table `connections`
 | Column | Type | Notes |
 |---|---|---|
-| `assigned_by_id` | UUID FK users, **null** | The delegator. NULL = normal self-created task. |
-| `assignment_status` | text | `none` \| `pending` \| `accepted` \| `declined` (default `none`). |
-| `assigned_at` | timestamptz null | When it was delegated. |
+| `id` | UUID | |
+| `requester_id` | UUID FK users | who sent the request |
+| `addressee_id` | UUID FK users | who receives it |
+| `status` | text | `pending` \| `accepted` \| `blocked` |
+| `created_at` / `updated_at` | timestamptz | |
 
-`user_id` continues to mean **the owner/assignee**. `status`/`progress` continue to
-mean the *doing* state (pending → completed). Assignment state is separate from work
-state on purpose (you can have `assignment_status=accepted` + `status=pending`).
+Unique on the unordered pair (no duplicate connections). "Are A and B connected?"
+= a row with the pair and `status='accepted'`.
 
-### 4.2 New table `connections` (Phase 2 — optional but recommended)
-Builds your network of people you delegate to / from. Enables name autocomplete,
-trust (auto-accept), and "only people I know can assign to me."
-| Column | Notes |
-|---|---|
-| `user_id`, `contact_id` | the two people |
-| `status` | `pending` \| `accepted` \| `blocked` |
-| `created_at` | |
+### 4.2 Changes to `tasks`
+| Column | Type | Notes |
+|---|---|---|
+| `assigned_by_id` | UUID FK users, **null** | delegator; NULL = normal self task |
+| `assignment_status` | text | `none` \| `active` \| `locked` \| `returned` |
+| `assigned_at` | timestamptz null | when delegated |
 
-### 4.3 New table `pending_invites` (Phase 2 — assign to non-users)
-When you assign to an email that isn't on AARTH yet, park it here; when they sign
-up with that email, materialize the task + send them into onboarding.
-| Column | Notes |
-|---|---|
-| `email`, `delegator_id`, `title`, `reason`, `deadline`, `created_at` | |
+- `active` = auto-accepted, live for the assignee (reminders on).
+- `locked` = assignee not subscribed → piled up, **no reminders**, shows paywall.
+- `returned` = assignee handed it back → delegator notified, task archived for assignee.
+- `user_id` still = assignee/owner; `status`/`progress` still = work state.
+
+### 4.3 Subscription flag (depends on billing work)
+Needs a per-user subscription state, e.g. `users.plan` (`free` | `pro`) or a
+`subscriptions` table. Delegation reads it on both sides. *(Coordinate with the
+billing/₹499 work — this is the shared dependency.)*
 
 ### 4.4 Notifications
-Reuse the existing `notifications` table; add kinds:
-`assignment_new`, `assignment_accepted`, `assignment_declined`, `assignment_done`,
-`delegated_overdue`. Add optional `actor_id` (who triggered it) for "Priya accepted…".
+Reuse `notifications`; add kinds + an optional `actor_id`:
+`connect_request`, `connect_accepted`, `assignment_new`, `assignment_returned`,
+`assignment_deadline_changed`, `assignment_done`, `delegated_overdue`,
+`assignment_locked_waiting`.
 
 ---
 
-## 5. Assignment lifecycle (state machine)
+## 5. Lifecycle (state machine)
 
 ```
-                 assign
-   (delegator) ──────────▶  PENDING ──accept──▶ ACCEPTED ──(assignee does work)──▶ DONE
-                              │  │                  │                                 │
-                              │  └── decline ──▶ DECLINED                             │
-                              │                    (delegator notified)              │
-                              └── (auto-accept if connection + setting) ─────────────┘
-   revoke (delegator, while PENDING/ACCEPTED) ──▶ removed from assignee (+ notice)
+CONNECT
+  A → request ─▶ (B) pending ─ accept ─▶ CONNECTED (both directions)
+                              └ decline/block ─▶ none/blocked
+
+ASSIGN  (A → B). Preconditions: A and B CONNECTED, and A is subscribed.
+  ├─ B subscribed     → task ACTIVE in B's list (auto-accept). Reminders start.
+  │                     A tracks it; no action needed from B.
+  └─ B NOT subscribed → task LOCKED (piled up) for B. No reminders.
+                        B sees "N tasks waiting — Subscribe to accept."
+                        A sees "Priya isn't subscribed yet."
+                        (On B subscribing, all her locked tasks flip to ACTIVE.)
+
+WHILE ACTIVE
+  • B changes deadline  → task updates; A notified ("Priya moved 'X' to Sat 2pm").
+  • B returns the task  → RETURNED; archived for B; A notified.
+  • B completes         → DONE; A notified ("Priya finished 'X'").
+  • A revokes           → removed from B (+ notice).
 ```
-
-- **PENDING**: task exists in assignee's list but greyed/"needs your OK"; not yet
-  reminding. Delegator sees "Pending Priya's acceptance."
-- **ACCEPTED**: becomes a live task for the assignee → reminders/follow-ups start;
-  delegator notified.
-- **DECLINED**: task archived; delegator notified with optional reason.
-- **DONE**: assignee completes it (normal flow) → delegator notified.
-- **Revoke/cancel**: delegator can pull it back while pending or accepted.
-
-Optional **auto-accept**: if the assignee has a connection with the delegator and
-"auto-accept from people I know" enabled, skip PENDING → straight to ACCEPTED.
 
 ---
 
 ## 6. API (Phase 1)
 
+**Connections**
+| Method / path | Does |
+|---|---|
+| `POST /connections/request` `{email}` | Send a request (or invite link if not a user). |
+| `GET /connections` | My connections + pending requests (in/out). |
+| `POST /connections/{id}/accept` / `decline` / `block` | Manage a request. |
+| `DELETE /connections/{id}` | Remove a connection. |
+
+**Assignment**
 | Method / path | Who | Does |
 |---|---|---|
-| `POST /assignments` `{title, to_email, when?, reason?, priority?}` | delegator | Create + assign a task in one shot. |
-| `POST /tasks/{id}/assign` `{to_email}` | delegator | Delegate an existing task. |
-| `POST /tasks/{id}/revoke` | delegator | Cancel a delegation (pending/accepted). |
-| `GET /assignments/incoming` | assignee | Tasks assigned to me awaiting Accept/Decline. |
-| `POST /assignments/{taskId}/accept` | assignee | Accept → live task. |
-| `POST /assignments/{taskId}/decline` `{reason?}` | assignee | Decline → delegator notified. |
-| `GET /tasks?filter=delegated` | delegator | "Delegated by me" + assignee + live status. |
-| `GET /tasks?filter=assigned_to_me` | assignee | Incoming + accepted-from-others. |
+| `POST /assignments` `{title, to, when?, reason?, priority?}` | delegator | Create + assign (checks connection + both subscribed). |
+| `POST /tasks/{id}/assign` `{to}` | delegator | Delegate an existing task. |
+| `POST /tasks/{id}/revoke` | delegator | Pull back a delegation. |
+| `POST /tasks/{id}/return` `{reason?}` | assignee | Hand a task back. |
+| `GET /tasks?filter=delegated` | delegator | "Delegated by me" + assignee + status. |
+| `GET /tasks?filter=assigned_to_me` | assignee | Active-from-others. |
+| `GET /tasks?filter=locked` | assignee | Piled-up tasks (subscribe to accept). |
 
-Completion uses the **existing** `POST /tasks/{id}/complete` (assignee) — the
-backend fires an `assignment_done` notification to the delegator.
-
-**Resolution of `to_email`:** if it's a registered user → assign; else (Phase 2)
-create a `pending_invite`. Phase 1 can restrict to registered users with a clear
-"they're not on AARTH yet — invite?" message.
+Completion + deadline edits use the **existing** task endpoints; the backend fires
+the delegator notifications. Assigning to a non-subscriber returns a clear state so
+the UI can show the paywall pile-up (not an error).
 
 ---
 
-## 7. Chat / agent integration (the magic)
+## 7. Chat / agent integration
 
-New agent tools so delegation is natural language:
+New agent tools (all enforce connection + subscription server-side):
+- `connect_person(name_or_email)` — "connect me with Priya."
+- `assign_task(title, to, when?, reason?)` — "ask Priya to send the report by Fri."
+- `list_delegated()` — "did Priya send the deck?", "what have I handed off?"
 
-- `assign_task(title, to, when?, reason?)` — "ask Priya to send the report by Fri",
-  "get Rahul to book the venue tomorrow."
-- `list_delegated()` — "what did I assign to others?", "did Priya send the deck?"
-- Incoming handled conversationally — AARTH can say *"Priya asked you to send the
-  report by Friday — want me to accept it?"* and on "yes" call `accept`.
-
-**Resolving `to`:** match the name against the user's connections / recently-used
-assignees; if ambiguous or unknown, AARTH asks ("Which Priya — priya@…?"). Never
-guess an email.
-
-This rides on the intent-first + duplicate-guard rules already in place, so it won't
-mis-assign from old context.
+Resolution of `to`: match against **connections** first; if not connected → AARTH
+offers to send a connection request; if not on AARTH → offer an invite link. Never
+guesses an email. Rides on the existing intent-first + duplicate guards.
 
 ---
 
 ## 8. Notifications & accountability
 
-| Event | Who gets it | Example |
+| Event | Who | Example |
 |---|---|---|
-| New assignment | assignee | "Mahesh assigned you 'Send deck', due Fri. Accept?" (call-style) |
-| Accepted / Declined | delegator | "Priya accepted 'Send deck'." / "Priya declined 'Send deck'." |
+| Connection request | addressee | "Mahesh wants to connect on AARTH. Accept?" |
+| Assigned (active) | assignee | "Mahesh assigned you 'Send deck', due Fri." |
+| Assigned but locked | assignee | "Mahesh assigned you a task — subscribe to accept it." |
+| Deadline changed | delegator | "Priya moved 'Send deck' to Sat 2pm." |
+| Returned | delegator | "Priya returned 'Send deck'." |
 | Completed | delegator | "Priya finished 'Send deck'." |
-| Assignee reminders | assignee | Normal at-time ping + 1h follow-up, phrased "Mahesh is counting on this." |
-| Delegated slipping | delegator | "Your delegated task 'Send deck' (Priya) is overdue — want to nudge her?" |
+| Delegated slipping | delegator | "'Send deck' (Priya) is overdue — nudge her?" |
 
-The **assertive collective follow-up** already built simply widens to include
-delegated items on both sides ("you owe Priya X; Rahul owes you Y").
+The existing assertive follow-up widens to cover both sides ("you owe Priya X; Rahul
+owes you Y").
 
 ---
 
 ## 9. UI / UX
 
-**Tasks tab → three light sections:**
-1. **My tasks** — self-created + accepted-from-others (chip: *"from Mahesh"*).
-2. **Assigned to me** — incoming requests with **Accept / Decline** buttons.
-3. **Delegated by me** — each with assignee name + a status chip
-   (Pending / Accepted / Done) + a **Nudge** button.
+**Tasks tab — sections:**
+1. **My tasks** — self-created + active-from-connections (chip: *"from Mahesh"*).
+2. **Delegated by me** — assignee name + status chip (In progress / Done / Returned /
+   Waiting-not-subscribed) + **Nudge** button.
+3. **Waiting to accept** (only if you have locked tasks) — "Subscribe to accept N
+   tasks people assigned you."
 
-**Ways to assign:**
-- **Chat:** "ask Priya to …" (primary, on-brand).
-- **Task menu:** "Assign to…" → pick a connection or type an email.
+**Connections screen** (new, small): connections list, pending requests, "Add /
+invite" (email or share link).
 
-**Small identity needs:** show assignee/delegator **display names** (we have them);
-Phase 2 adds avatars/initials.
+**Assign entry points:** chat ("ask Priya to…") primary; task menu "Assign to…" →
+pick a connection.
 
 ---
 
 ## 10. Privacy, permissions, anti-abuse
 
-- A delegated task is visible to **exactly two people**: delegator + assignee.
-- The delegator sees **only that task**, never the assignee's other tasks/profile.
-- **Accept/decline** means no one can silently pile work on you.
-- **Block/mute** a user; setting: *"Only people I've connected with can assign to me."*
-- **Rate-limit** assignments per user/day; add a **Report** action (Phase 2).
-- Assignee can **decline** anytime before accepting, and **return** after accepting.
+- Only **connected** users can assign — no global/stranger assignments.
+- A delegated task is visible to exactly the two parties; the delegator sees **only
+  that task**, nothing else of the assignee's.
+- **Block** a connection; blocked users can't request or assign.
+- **Return** any single task without breaking the connection.
+- Rate-limit requests/assignments; **Report** action (Phase 2).
 
 ---
 
-## 11. Edge cases to handle
+## 11. Billing coupling (important)
 
-- **Assignee not on AARTH** → invite-by-email flow (Phase 2); Phase 1 blocks with a
-  friendly "invite them" prompt.
-- **Delegator revokes/deletes** → task removed from assignee with a notice.
-- **Assignee changes the deadline** → delegator sees the update (decision: silent
-  update vs. "requested a new time, approve?" — recommend silent + a note for MVP).
-- **Assignee account deleted** → delegated tasks marked "assignee left"; delegator
-  can reclaim/reassign.
-- **Onward delegation** (Priya re-assigns to someone) → Phase 3.
-- **Duplicate assignment** of the same thing → reuse the existing duplicate-guard,
-  scoped per assignee.
+Delegation is a **paid, both-sides** feature:
+- **Delegator must be subscribed** to assign (upsell at the "Assign" action).
+- **Assignee must be subscribed** for tasks to go **active**; otherwise they **pile
+  up locked** → "Subscribe to accept the tasks people gave you" (conversion lever).
+- On subscribing, a user's locked tasks flip to active in one sweep.
+
+➡️ **Dependency:** needs the subscription state from the ₹499 billing work. Recommend
+building **billing first (or in parallel)**, since delegation gates on it.
 
 ---
 
 ## 12. Phasing
 
-**Phase 1 — MVP (delegation that works):**
-registered-users-only; assign new/existing task by email; accept/decline; "Delegated
-by me" + "Assigned to me" views; notifications on assign/accept/decline/complete;
-`assign_task` + `list_delegated` agent tools.
+**Phase 1 — MVP:** connections (request/accept/block) · auto-accept within a
+connection · assign new/existing task · return / revoke · deadline-change +
+completion notifications · locked pile-up for non-subscribers · "Delegated by me" +
+"Assigned to me" views · `connect_person` / `assign_task` / `list_delegated` tools.
 
-**Phase 2 — Network & reach:**
-connections/contacts + auto-accept from people you know; invite non-users by email;
-delegator accountability nudges; a lightweight **comment/update thread** on a shared
-task ("any update?"); block/report.
+**Phase 2 — Reach & richness:** invite-by-link onboarding for non-users · comment /
+"any update?" thread on a shared task · block/report · delegator accountability
+nudges baked into the follow-up.
 
-**Phase 3 — Teams / B2B:**
-groups & shared projects, multi-assignee, roles, onward delegation, org/workspace
-accounts — the paid **team plan** upsell.
+**Phase 3 — Teams / B2B:** groups & shared projects, multi-assignee, roles, onward
+delegation, workspace accounts — the paid **Team plan**.
 
 ---
 
-## 13. Decisions needed from you
+## 13. Phase 1 build checklist
 
-1. **Acceptance:** require Accept/Decline (recommended, prevents dumping) — or
-   auto-accept so it just appears? (Could be a per-user setting.)
-2. **Reach:** Phase 1 = registered users only (fast) — or build invite-by-email now
-   so a friend gets pulled in even before they've joined?
-3. **Deadline control:** can the assignee change the time, or is it delegator-owned?
-4. **Billing:** do delegated tasks count against the assignee's plan limits, the
-   delegator's, or neither? (Ties into the subscription model.)
+1. **Billing dependency:** confirm the subscription flag (`users.plan` or
+   `subscriptions`) exists or is being added.
+2. **Migrations:** `connections` table; `tasks.assigned_by_id`,
+   `assignment_status`, `assigned_at`; notification `actor_id`.
+3. **Models:** `Connection`; extend `Task`.
+4. **Services:** `connections_service` (request/accept/are_connected);
+   `delegation_service` (assign → check connection + subscription → active|locked;
+   revoke; return; on-complete/on-deadline-change → notify delegator; on-subscribe →
+   unlock).
+5. **API routes:** connections + assignment endpoints (§6); task filters.
+6. **Agent tools:** `connect_person`, `assign_task`, `list_delegated` (+ prompt
+   rules: only assign to connections; offer connect/invite otherwise).
+7. **Nudges:** new kinds; widen the follow-up to delegated items.
+8. **UI:** Connections screen; Tasks-tab sections + "from X" chips + status chips +
+   Nudge; locked/paywall banner; chat flows.
+9. **Tests:** connect→assign→active; assign-to-unsubscribed→locked→subscribe→active;
+   return/revoke/deadline-change notifications; non-connection assignment blocked.
 
 ---
 
-## 14. Why this is worth it (business)
+## 14. Why it's worth it
 
-- **Growth loop:** each delegation invites a new user (the assignee). Delegation is
-  inherently viral.
-- **Stickiness:** shared accountability across people is far harder to leave than a
-  solo to-do list.
-- **Upsell:** teams/orgs → a paid **Team plan**, the natural B2B path beyond ₹499
-  individual.
+- **Growth loop:** every connection/assignment invites another user.
+- **Retention:** shared accountability is far stickier than a solo list.
+- **Revenue:** both-sides-subscription + the locked pile-up convert testers to payers,
+  and Phase 3 opens the **Team plan** B2B tier.
 </content>
