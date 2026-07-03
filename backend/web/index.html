@@ -621,6 +621,8 @@ async function ensureNativePerm(){
   if(p.display==="granted"){ await ensureNativeChannel(); await initNativeListeners(); }
   return p.display==="granted";
 }
+let _meCache=null;
+async function getMe(){ if(_meCache) return _meCache; try{ _meCache=await api("/auth/me"); }catch(_){ _meCache=null; } return _meCache; }
 async function syncNativeReminders(tasks){
   const LN=getLN(); if(!LN) return;
   try{
@@ -643,6 +645,14 @@ async function syncNativeReminders(tasks){
       if(fu>now)
         out.push({id:base+1000000000, title:"AARTH", body:`“${t.title}” done? Tap to check in on your list.`, channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(fu), allowWhileIdle:true}});
     });
+    // Daily morning brief + evening review — repeat at the user's set hours so they
+    // fire even with the app fully closed (fully native, no web push).
+    const me=await getMe();
+    if(me){
+      const hh=(h,d)=>(typeof h==="number"?h:d);
+      out.push({id:2000000001, title:"Good morning ☀️", body:"Here's your day — tap to see what's on and get started.", channelId:NCHAN, sound:NSOUND, schedule:{on:{hour:hh(me.morning_hour,8), minute:0}, allowWhileIdle:true}});
+      out.push({id:2000000002, title:"Evening review", body:"How did today go? Tap to check in on what's still pending.", channelId:NCHAN, sound:NSOUND, schedule:{on:{hour:hh(me.evening_hour,20), minute:0}, allowWhileIdle:true}});
+    }
     if(out.length) await LN.schedule({notifications:out});
   }catch(e){ console.warn("native reminders failed", e); }
 }
@@ -1060,8 +1070,9 @@ $("#saveSettings").onclick=async()=>{
   try{
     const me=await api("/auth/me/settings",{method:"PATCH",body});
     ringEnabled=me.ring_enabled;
+    _meCache=me;                     // so native reviews reschedule at the new hours
     $("#setStatus").textContent="Saved ✓";
-    loadToday();
+    loadToday();                     // re-runs syncNativeReminders with new times
   }catch(e){ $("#setStatus").textContent=e.message; }
 };
 
