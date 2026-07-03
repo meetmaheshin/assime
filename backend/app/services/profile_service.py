@@ -103,9 +103,11 @@ async def refresh(db: AsyncSession, llm, user: User) -> None:
 
 
 async def maybe_refresh(db: AsyncSession, llm, user: User) -> None:
-    """Refresh only if the profile is missing or older than REFRESH_EVERY."""
+    """Refresh if the profile has no summary yet, or is older than REFRESH_EVERY.
+    (A fresh account has no tasks on its first message, so we must keep trying
+    until there's enough behavior to summarize — not lock in an empty profile.)"""
     p = await db.scalar(select(UserProfile).where(UserProfile.user_id == user.id))
     now = datetime.now(timezone.utc)
-    if p and p.refreshed_at and (now - p.refreshed_at) < REFRESH_EVERY:
+    if p and p.summary and p.refreshed_at and (now - p.refreshed_at) < REFRESH_EVERY:
         return
     await refresh(db, llm, user)
