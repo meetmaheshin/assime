@@ -205,7 +205,6 @@
       <input id="password" placeholder="Password (min 8 chars)" type="password" autocomplete="current-password" />
       <div class="err" id="authErr"></div>
       <button class="btn-primary" id="authBtn">Sign in</button>
-      <button class="link" id="demoBtn">✨ Try the demo account</button>
       <button class="link" id="authToggle">New here? Create an account</button>
     </div>
   </div>
@@ -330,9 +329,7 @@
             </div>
             <label class="toggle"><span>Don't ring — silent notifications only</span><input type="checkbox" id="setNoRing" /></label>
             <label class="toggle"><span>Voice replies (AARTH speaks)</span><input type="checkbox" id="setVoice" checked /></label>
-            <label class="toggle"><span>Push reminders (even when app is closed)</span><input type="checkbox" id="setPush" /></label>
-            <button class="btn-sm" id="testPushBtn" style="width:100%">Send test reminder</button>
-            <button class="btn-sm" id="testNativeBtn" style="width:100%">🔔 Test phone alarm (10 sec)</button>
+            <button class="btn-sm" id="testNativeBtn" style="width:100%">🔔 Test notification (10 sec)</button>
             <div id="nativeStatus" class="muted" style="font-size:12px;min-height:14px"></div>
             <button class="btn-primary" id="saveSettings">Save settings</button>
             <div id="setStatus" class="muted" style="font-size:13px;min-height:16px"></div>
@@ -346,10 +343,6 @@
             <button class="btn-sm" id="exportBtn" style="width:100%">Export my data</button>
             <button class="btn-sm" id="wipeBtn" style="width:100%;border-color:var(--danger);color:var(--danger)">Delete all my data</button>
             <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
-            <label class="slabel">Add to home screen</label>
-            <div class="muted" style="font-size:13px;margin-top:-6px">Install AARTH like an app — one tap from your home screen.</div>
-            <button class="btn-sm" id="installBtn">Install AARTH</button>
-            <div id="installHint" class="muted" style="font-size:12px"></div>
             <button class="btn-sm" id="logoutBtn" style="width:100%;margin-top:6px;border-color:var(--danger);color:var(--danger)">Sign out</button>
             <div id="appVersion" class="muted" style="font-size:11px;text-align:center;margin-top:10px;opacity:.7"></div>
           </div>
@@ -477,7 +470,6 @@ async function doAuth(email,pw){
 }
 $("#authBtn").onclick=()=>doAuth($("#email").value.trim(),$("#password").value);
 $("#password").addEventListener("keydown",e=>{if(e.key==="Enter")$("#authBtn").click();});
-$("#demoBtn").onclick=()=>{mode="login";$("#email").value="demo@aath.app";$("#password").value="demo12345";doAuth("demo@aath.app","demo12345");};
 function logout(){token=null;localStorage.removeItem("aath_token");if(notifTimer)clearInterval(notifTimer);$("#app").classList.add("hidden");$("#auth").classList.remove("hidden");}
 $("#logoutBtn").onclick=logout;
 
@@ -511,7 +503,6 @@ async function enterApp(){
   await loadToday();               // populates Today + posts greeting only if chat is empty
   showTab("chat");                 // chat is the home screen — a conversation first
   loadNotifications();
-  ensurePush();  // keep the push subscription fresh if enabled
   if(notifTimer) clearInterval(notifTimer);
   notifTimer=setInterval(loadNotifications, 30000);  // proactive polling
   maybeTour();  // one-time first-login walkthrough
@@ -931,7 +922,7 @@ $("#micBtn").onclick=async()=>{
     try{ const t=await transcribe(blob); if(t){ $("#chatInput").value=t; send(true); } else toast("Didn't catch that ("+Math.round(blob.size/1024)+"KB) — try again"); }
     catch(e){ toast("Voice failed: "+(e.message||"error")); }
   }else{
-    if(!recSupported()){ toast("Voice needs Chrome or Edge"); return; }
+    if(!recSupported()){ toast("Microphone unavailable here"); return; }
     try{ chatRec=await recStart(); $("#micBtn").classList.add("rec"); toast("● Recording… tap mic to send"); }
     catch(_){ toast("Allow microphone access to use voice"); }
   }
@@ -947,7 +938,7 @@ $("#homeMic").onclick=async()=>{
     try{ const t=await transcribe(blob); if(!t){ setCap("Didn't catch that ("+Math.round(blob.size/1024)+"KB) — tap and try again."); return; } setCap("“"+t+"”"); submitCapture(t); }
     catch(e){ setCap("Voice failed: "+(e.message||"error")); }
   }else{
-    if(!recSupported()){ setCap("Voice needs Chrome or Edge."); return; }
+    if(!recSupported()){ setCap("Microphone unavailable here."); return; }
     try{ capRec=await recStart(); $("#homeMic").classList.add("rec"); setCap("● Recording… tap the mic again to finish."); }
     catch(_){ setCap("Allow microphone access, then tap again."); }
   }
@@ -1000,8 +991,6 @@ async function loadSettings(){
   fillHours($("#setQTo"), me.quiet_hours_end);
   $("#setNoRing").checked = !me.ring_enabled;
   $("#setVoice").checked = voiceOn;
-  $("#setPush").checked = (localStorage.getItem("aath_push")==="on") &&
-    ("Notification" in window) && Notification.permission==="granted";
   $("#setStatus").textContent="";
   showNativeStatus();
   loadProfile();
@@ -1036,10 +1025,6 @@ $("#wipeBtn").onclick=async()=>{
   }catch(e){ toast("Delete failed"); }
 };
 $("#settingsBtn").onclick=()=>{ showTab("settings"); loadSettings(); };
-$("#setPush").onchange=async(e)=>{
-  if(e.target.checked){ e.target.checked = await enablePush(); }
-  else { localStorage.setItem("aath_push","off"); toast("Reminders off on this device"); }
-};
 $("#upgradeBtn").onclick=()=>{ $("#upgradeBtn").textContent="Coming soon 🚀"; setTimeout(()=>{ $("#upgradeBtn").textContent="Upgrade"; },2000); };
 $("#saveSettings").onclick=async()=>{
   $("#setStatus").textContent="Saving…";
@@ -1062,48 +1047,10 @@ $("#saveSettings").onclick=async()=>{
   }catch(e){ $("#setStatus").textContent=e.message; }
 };
 
-/* ── Web Push ── */
-function urlB64ToUint8(b64){
-  const pad="=".repeat((4-b64.length%4)%4);
-  const s=(b64+pad).replace(/-/g,"+").replace(/_/g,"/");
-  const raw=atob(s); return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
-}
-async function enablePush(){
-  if(!("serviceWorker" in navigator)||!("PushManager" in window)){ toast("Push isn't supported on this browser"); return false; }
-  const perm=await Notification.requestPermission();
-  if(perm!=="granted"){ toast("Allow notifications in your browser to get reminders"); return false; }
-  let key; try{ key=await api("/push/key"); }catch(_){ return false; }
-  if(!key.enabled||!key.key){ toast("Push isn't configured on the server yet"); return false; }
-  const reg=await navigator.serviceWorker.ready;
-  let sub=await reg.pushManager.getSubscription();
-  if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:urlB64ToUint8(key.key)});
-  await api("/push/subscribe",{method:"POST",body:sub.toJSON()});
-  localStorage.setItem("aath_push","on");
-  return true;
-}
-async function ensurePush(){ if(localStorage.getItem("aath_push")==="on"){ try{ await enablePush(); }catch(_){} } }
-$("#testPushBtn").onclick=async()=>{
-  const ok = localStorage.getItem("aath_push")==="on" || await enablePush();
-  if(!ok) return;
-  try{ const r=await api("/push/test",{method:"POST"}); toast(r.delivered? "Test reminder sent 🔔":"Subscribed, but no device got it"); }catch(e){ toast(e.message); }
-};
-
-/* ── PWA: service worker + install ── */
+/* Service worker — HTML caching only (network-first). */
 if("serviceWorker" in navigator){
   window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 }
-let deferredPrompt=null;
-window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); deferredPrompt=e; });
-$("#installBtn").onclick=async()=>{
-  if(deferredPrompt){
-    deferredPrompt.prompt(); const {outcome}=await deferredPrompt.userChoice; deferredPrompt=null;
-    $("#installHint").textContent = outcome==="accepted" ? "Installed — check your home screen." : "No problem, you can install anytime.";
-  }else if(window.matchMedia("(display-mode: standalone)").matches){
-    $("#installHint").textContent="Already installed. 🎉";
-  }else{
-    $("#installHint").textContent="iPhone (Safari): Share → Add to Home Screen. Android (Chrome): ⋮ menu → Install app.";
-  }
-};
 
 if(token){enterApp().catch(logout);}
 </script>
