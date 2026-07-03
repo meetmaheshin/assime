@@ -626,16 +626,18 @@ async function loadNotifications(speakTop){
   if(pending.length){ badge.textContent=pending.length; badge.classList.remove("hidden"); }
   else badge.classList.add("hidden");
   renderNotif(list);
-  // Ring for the first unseen call-level nudge (morning brief, overdue, P1 due).
+  // Ring for the first unseen call-level nudge (morning brief, overdue, reminder)
+  // as a live attention-grabber — but don't let it stop the chat drop below.
   const call=pending.find(n=>n.alert_level==="call" && !shownCalls.has(n.id));
-  if(call && !activeCall && ringEnabled){ shownCalls.add(call.id); showCall(call); return; }
-  // AARTH starts the conversation itself: drop non-urgent follow-ups straight
-  // into the chat thread (it messages you first), then clear them from pending.
-  const fresh=pending.filter(n=>n.alert_level!=="call" && !shownChat.has(n.id));
+  if(call && !activeCall && ringEnabled){ shownCalls.add(call.id); showCall(call); }
+  // AARTH messages you first: drop EVERY fresh nudge (reminders + check-ins)
+  // straight into the chat thread so there's always a visible record, then clear
+  // it from the bell — chat is the running conversation.
+  const fresh=pending.filter(n=>!shownChat.has(n.id));
   for(const n of fresh){
     shownChat.add(n.id);
     addMsg("ai", n.body, []);
-    try{ await api(`/notifications/${n.id}/respond`,{method:"POST",body:{text:"opened in chat"}}); }catch(_){}
+    try{ await api(`/notifications/${n.id}/respond`,{method:"POST",body:{text:"seen in chat"}}); }catch(_){}
   }
   if(speakTop && pending.length && !activeCall) speak(pending[0].title+". "+pending[0].body);
 }
@@ -670,7 +672,7 @@ $("#callAnswer").onclick=async()=>{
   // Answering drops you into a real conversation: AARTH opens with the nudge,
   // you reply by text or voice, and it responds (grounded in your memory).
   showTab("chat");
-  addMsg("ai", n.body, []);   // spoken via Cartesia (if voice on)
+  if(!shownChat.has(n.id)){ shownChat.add(n.id); addMsg("ai", n.body, []); }  // avoid dup if the poll already posted it
   // Mark it handled so it clears the badge and won't ring again.
   try{ await api(`/notifications/${n.id}/respond`,{method:"POST",body:{text:"opened in chat"}}); }catch(_){}
   loadNotifications();

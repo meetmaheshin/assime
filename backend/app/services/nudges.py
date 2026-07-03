@@ -126,16 +126,18 @@ async def generate(
     # ── Everything else respects quiet hours ──
     if budget > 0 and (force or not _in_quiet_hours(
             hour, user.quiet_hours_start, user.quiet_hours_end)):
-        # Grace period: never nag about a task the user just added — a real PA
-        # gives it room before asking "still on track?".
-        fresh = now - CREATE_GRACE
-        settled = [t for t in open_tasks if t.created_at and t.created_at < fresh]
-        overdue = [t for t in settled if t.deadline and t.deadline < now]
+        # A task whose time has passed always earns a status check-in — that's the
+        # whole point of accountability, so no creation grace here.
+        overdue = [t for t in open_tasks if t.deadline and t.deadline < now]
         overdue_ids = {t.id for t in overdue}
+        # Grace only on the "due today, still on track?" heads-up: don't post it
+        # for a task the user just added (a real PA gives it room).
+        fresh = now - CREATE_GRACE
         due_today = [
-            t for t in settled
+            t for t in open_tasks
             if t.deadline and t.id not in overdue_ids
-            and day_start_utc <= t.deadline < day_end_utc]
+            and day_start_utc <= t.deadline < day_end_utc
+            and t.created_at and t.created_at < fresh]
 
         for t in overdue:
             await add("overdue", "Overdue check-in",
