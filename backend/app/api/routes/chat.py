@@ -92,7 +92,7 @@ async def chat(
         # Recent conversation so multi-turn dialogue stays coherent.
         history_rows = list(await db.scalars(
             select(ConversationTurn).where(ConversationTurn.user_id == user.id)
-            .order_by(ConversationTurn.created_at.desc()).limit(10)))
+            .order_by(ConversationTurn.created_at.desc()).limit(20)))
         history = [{"role": t.role, "content": t.content} for t in reversed(history_rows)]
         try:
             result = await agent.run(db, user, payload.message, history, context)

@@ -94,6 +94,20 @@ async def _create_task(db, user, now, args) -> str:
         return "No title given."
     prio = args.get("priority")
     prio = prio if isinstance(prio, int) and 1 <= prio <= 4 else 3
+    # Duplicate guard: with one continuous conversation, the model must NEVER
+    # silently re-create something already on the list (from an earlier message
+    # or a past day). Semantic match against existing open tasks.
+    if not args.get("force"):
+        probe = f"{title}. {args.get('reason') or ''}".strip()
+        dupes = await memory_service.find_duplicates(
+            db, llm, user_id=user.id, text=probe)
+        for mem, _sim in dupes:
+            existing = await db.get(Task, mem.source_id) if mem.source_id else None
+            if existing is not None and existing.status != "completed":
+                return (f'ALREADY EXISTS: "{existing.title}" is already on the list — '
+                        "do NOT create a duplicate. Tell the user it's already there. "
+                        "Only if they clearly want a separate second one, call "
+                        "create_task again with force=true.")
     # `when` is the new name; accept `deadline`/`starts_at` for compatibility.
     when = _parse_dt(
         args.get("when") or args.get("deadline") or args.get("starts_at"), now)
@@ -233,8 +247,12 @@ async def run(
         "completed something, call complete_task. A task with a time IS its own "
         "reminder. If create_task reports a CONFLICT, tell them and ask before "
         "adding both. If a time already passed today, use the next day.\n"
-        "Don't blindly repeat old titles/times from history, but DO use context to "
-        "reason. Keep replies to 1-3 short sentences. Use their name rarely. When "
+        "MEMORY vs ACTION: act ONLY on the user's latest message. Older messages "
+        "and the task list are for understanding/context only — NEVER re-create or "
+        "re-complete something just because it appears earlier in the conversation; "
+        "it was already handled. Before creating, check Current state: if a matching "
+        "task already exists, say so instead of adding a duplicate.\n"
+        "Keep replies to 1-3 short sentences. Use their name rarely. When "
         "the user reveals a lasting preference or fact about themselves, call "
         "remember_fact. Use what you know about them to be more personal. Never "
         f"invent facts. Now: {now.isoformat()} (year {now.year}; never a past year).\n\n"
@@ -244,7 +262,7 @@ async def run(
     )
 
     messages = [{"role": "system", "content": system}]
-    messages.extend(history[-10:])
+    messages.extend(history[-20:])
     messages.append({"role": "user", "content": message})
 
     for _ in range(4):  # allow a few tool round-trips
