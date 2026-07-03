@@ -13,12 +13,60 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import logging
+
 from app.models.notification import Notification
 from app.models.task import Task
 from app.models.user import User
+from app.services.llm import llm
 
 DAILY_CAP = 6  # never spam
 CREATE_GRACE = timedelta(hours=3)  # don't nag about a just-added task
+FOLLOWUP_GAP = timedelta(hours=1)  # wait this long after a timed task, then check in
+
+
+async def _accountability_message(user: User, open_tasks, now: datetime, mode: str) -> str:
+    """LLM-written, human, ASSERTIVE check-in about ALL pending items — references
+    why they matter and pushes the user to finish. Falls back to a firm template
+    if the model is unavailable. `mode` = "followup" | "evening"."""
+    lines = []
+    for t in open_tasks[:8]:
+        why = f" — matters because: {t.reason}" if t.reason else ""
+        if t.deadline and t.deadline < now:
+            hrs = (now - t.deadline).total_seconds() / 3600
+            status = f" [overdue ~{int(hrs)}h]" if hrs >= 1 else " [time just passed]"
+        elif t.deadline:
+            try:
+                status = f" [due {t.deadline.astimezone(ZoneInfo(user.timezone)):%H:%M}]"
+            except Exception:
+                status = ""
+        else:
+            status = ""
+        lines.append(f'- "{t.title}"{why}{status}')
+    tasklist = "\n".join(lines)
+    when = "It's the end of the day." if mode == "evening" else f"It's {now:%A}, mid-day."
+    system = (
+        f"You are {user.assistant_name}, {user.display_name}'s accountability "
+        "partner — NOT a soft, polite assistant. You are personally on the hook "
+        "for making sure their tasks actually get DONE. Write ONE short check-in "
+        "(2-4 sentences, like a sharp friend texting) that: asks where they are on "
+        "their pending items, reminds them WHY the important ones matter (use the "
+        "reasons given), and pushes them to finish. Be direct and a little firm — "
+        "it's fine to call out something that's slipping. No bullet lists, no "
+        "emojis, no corporate tone. Sound like a real person who genuinely wants "
+        "them to succeed and won't let them off the hook."
+    )
+    prompt = (f"{when} {user.display_name}'s still-open items:\n{tasklist}\n\n"
+              "Write the check-in message now (plain text, no lists).")
+    try:
+        msg = (await llm.complete(system, prompt, reasoning=False)).strip()
+        if msg:
+            return msg
+    except Exception:
+        logging.exception("accountability message generation failed")
+    titles = ", ".join(f'"{t.title}"' for t in open_tasks[:4])
+    return (f"Still open: {titles}. Where are you on these? Let's not let them "
+            "slide — tell me what's done and what's actually blocking the rest.")
 
 
 def _has_clock_time(dt: datetime | None, tz: str) -> bool:
@@ -97,28 +145,24 @@ async def generate(
         created.append(n)
         budget -= 1
 
-    # ── Timed-task reminders — time-critical, so they bypass quiet hours ──
+    # ── One ping AT the task time — time-critical, so it bypasses quiet hours.
+    # No "10 min before" pre-alert: we're a PA, not a to-do app. Accountability
+    # comes from the follow-up an hour later (below), not from nagging early. ──
     for t in timed_today:
         mins = (t.deadline - now).total_seconds() / 60.0
-        if 3 <= mins <= 15:
-            kind = "task_soon"
-        elif -4 <= mins < 3:
-            kind = "task_now"
-        else:
+        if not (-3 <= mins <= 3):
             continue
         if budget <= 0:
             break
         already = await db.scalar(select(Notification.id).where(
-            Notification.user_id == user.id, Notification.kind == kind,
+            Notification.user_id == user.id, Notification.kind == "task_now",
             Notification.task_id == t.id))
         if already:
             continue
         whenstr = _local(t.deadline, user.timezone).strftime("%H:%M")
-        body = (f"“{t.title}” is happening now ({whenstr})."
-                if kind == "task_now"
-                else f"“{t.title}” at {whenstr} — in {int(round(mins))} min.")
-        n = Notification(user_id=user.id, kind=kind, title="Reminder",
-                         body=body, alert_level="call", task_id=t.id)
+        n = Notification(user_id=user.id, kind="task_now", title="Reminder",
+                         body=f"“{t.title}” — it's time ({whenstr}).",
+                         alert_level="call", task_id=t.id)
         db.add(n)
         created.append(n)
         budget -= 1
@@ -126,27 +170,23 @@ async def generate(
     # ── Everything else respects quiet hours ──
     if budget > 0 and (force or not _in_quiet_hours(
             hour, user.quiet_hours_start, user.quiet_hours_end)):
-        # A task whose time has passed always earns a status check-in — that's the
-        # whole point of accountability, so no creation grace here.
-        overdue = [t for t in open_tasks if t.deadline and t.deadline < now]
-        overdue_ids = {t.id for t in overdue}
-        # Grace only on the "due today, still on track?" heads-up: don't post it
-        # for a task the user just added (a real PA gives it room).
-        fresh = now - CREATE_GRACE
-        due_today = [
-            t for t in open_tasks
-            if t.deadline and t.id not in overdue_ids
-            and day_start_utc <= t.deadline < day_end_utc
-            and t.created_at and t.created_at < fresh]
+        # Collective accountability follow-up: once a timed task's time has passed
+        # (by ~an hour), check in on EVERYTHING still pending — one human, assertive
+        # message that references why things matter and pushes back. Deduped to at
+        # most once per ~3h so it never spams.
+        passed_gap = any((now - t.deadline) >= FOLLOWUP_GAP for t in timed_today)
+        if budget > 0 and open_tasks and passed_gap:
+            recent = await db.scalar(select(Notification.id).where(
+                Notification.user_id == user.id, Notification.kind == "followup",
+                Notification.created_at >= now - timedelta(hours=3)))
+            if not recent:
+                msg = await _accountability_message(user, open_tasks, now, "followup")
+                n = Notification(user_id=user.id, kind="followup",
+                                 title="Checking in", body=msg, alert_level="call")
+                db.add(n)
+                created.append(n)
+                budget -= 1
 
-        for t in overdue:
-            await add("overdue", "Overdue check-in",
-                      f"You planned to finish “{t.title}” by "
-                      f"{t.deadline.date().isoformat()}. What happened?", t.id, alert="call")
-        for t in due_today:
-            await add("due_today", "Due today",
-                      f"“{t.title}” is due today. Still on track?", t.id,
-                      alert="call" if t.priority == 1 else "normal")
         if force or (user.morning_hour <= hour < 12):
             if timed_today:
                 sched = "Today's schedule: " + "; ".join(
@@ -158,17 +198,14 @@ async def generate(
             pend = f" Pending: {top}." if top else " Nothing pending — nice."
             await add("morning_brief", f"Good morning, {user.display_name}",
                       sched + pend + " Want to start with the top one?", alert="call")
-        if force or (user.evening_hour <= hour < 23):
-            titles = [t.title for t in open_tasks]
-            if titles:
-                shown = "; ".join(f"“{x}”" for x in titles[:6])
-                more = f" (+{len(titles) - 6} more)" if len(titles) > 6 else ""
-                body = (f"Time for today's review. You still have {len(titles)} open: "
-                        f"{shown}{more}. Which did you get done, and what should I "
-                        "carry over to tomorrow?")
+        if (force or (user.evening_hour <= hour < 23)) and budget > 0 \
+                and not await _exists_today(
+                    db, user.id, "evening_review", None, day_start_utc):
+            if open_tasks:
+                body = await _accountability_message(user, open_tasks, now, "evening")
             else:
-                body = ("Time for today's review — nothing left open, nice work. "
-                        "Anything you want to line up for tomorrow?")
+                body = ("Day's done and nothing's left open — solid work. Want to "
+                        "line anything up for tomorrow?")
             await add("evening_review", "Evening review", body, alert="call")
 
     if created:

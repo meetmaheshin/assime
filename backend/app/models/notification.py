@@ -24,7 +24,7 @@ class Notification(Base, UUIDMixin, TimestampMixin):
         index=True,
         nullable=False,
     )
-    # morning_brief | evening_review | overdue | due_today | task_soon | task_now
+    # morning_brief | evening_review | followup | task_now
     kind: Mapped[str] = mapped_column(String(24), index=True, nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)

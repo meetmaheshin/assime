@@ -91,6 +91,17 @@
   .toast{position:absolute;left:50%;transform:translateX(-50%);bottom:96px;z-index:70;
     background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;
     font-size:13px;box-shadow:0 10px 26px rgba(0,0,0,.5);max-width:80%;text-align:center}
+  .tour{position:absolute;inset:0;z-index:200}
+  .tour.hidden{display:none}
+  .tourhole{position:absolute;border-radius:14px;border:2px solid var(--accent);
+    box-shadow:0 0 0 9999px rgba(6,8,12,.82);transition:all .25s ease;pointer-events:none}
+  .tourcard{position:absolute;max-width:290px;background:var(--surface2);
+    border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 16px 44px rgba(0,0,0,.55)}
+  .tourtext{font-size:15px;line-height:1.45;margin-bottom:14px}
+  .touractions{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .tourskip{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer}
+  .tournext{background:var(--accent);color:#111;border:none;border-radius:10px;
+    padding:9px 20px;font-weight:700;font-size:14px;cursor:pointer}
   .capbubble{position:absolute;right:16px;bottom:152px;z-index:25;max-width:74%;
     background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;
     font-size:14px;line-height:1.4;box-shadow:0 12px 30px rgba(0,0,0,.55)}
@@ -239,7 +250,7 @@
           <button class="cbtn" id="micBtn" title="Tap to talk" aria-label="Tap to talk">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
           </button>
-          <textarea id="chatInput" placeholder="Ask AARTH…"></textarea>
+          <textarea id="chatInput" placeholder="Tell me anything — “remind me to pay rent at 6pm”"></textarea>
           <button class="cbtn send" id="sendBtn" title="Send" aria-label="Send">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
           </button>
@@ -342,6 +353,18 @@
 
     <div id="toast" class="toast hidden"></div>
 
+    <!-- First-login walkthrough (once per lifetime) -->
+    <div id="tour" class="tour hidden">
+      <div id="tourHole" class="tourhole"></div>
+      <div id="tourCard" class="tourcard">
+        <div id="tourText" class="tourtext"></div>
+        <div class="touractions">
+          <button id="tourSkip" class="tourskip">Skip</button>
+          <button id="tourNext" class="tournext">Next</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Voice FAB + status bubble: thumb-reachable, above the nav -->
     <div id="capBubble" class="capbubble hidden"></div>
     <button id="homeMic" class="fabmic" title="Tap to talk" aria-label="Voice add task">
@@ -351,8 +374,6 @@
     <nav class="bottomnav">
       <button class="nav active" data-tab="chat"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span>Chat</button>
       <button class="nav" data-tab="today"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></span>Today</button>
-      <button class="nav" data-tab="add"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg></span>Add</button>
-      <button class="nav" data-tab="memory"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3z"/></svg></span>Memory</button>
     </nav>
 
     <!-- INCOMING CALL-STYLE REMINDER -->
@@ -487,7 +508,44 @@ async function enterApp(){
   ensurePush();  // keep the push subscription fresh if enabled
   if(notifTimer) clearInterval(notifTimer);
   notifTimer=setInterval(loadNotifications, 30000);  // proactive polling
+  maybeTour();  // one-time first-login walkthrough
 }
+
+/* First-login walkthrough — highlights the few things that matter, once ever. */
+const TOUR=[
+  {sel:"#chatInput", text:"This is your assistant. Just tell it what you need — “remind me to call the bank at 4pm.” It creates, tracks, and follows up for you."},
+  {sel:"#homeMic", text:"Prefer talking? Tap the mic and speak — Hindi or English, whatever’s natural."},
+  {sel:'[data-tab="today"]', text:"Tap Today to see everything on your plate and mark things done with one tap."},
+  {sel:null, text:"I’ll check in during the day and every evening to make sure things actually get done. Let’s go."}
+];
+let _tourI=0;
+function positionTour(){
+  const step=TOUR[_tourI], hole=$("#tourHole"), card=$("#tourCard");
+  const el=step.sel?document.querySelector(step.sel):null;
+  $("#tourText").textContent=step.text;
+  $("#tourNext").textContent=(_tourI===TOUR.length-1)?"Let’s go":"Next";
+  if(el){
+    const r=el.getBoundingClientRect(), pad=8;
+    hole.style.display="block";
+    hole.style.left=(r.left-pad)+"px"; hole.style.top=(r.top-pad)+"px";
+    hole.style.width=(r.width+pad*2)+"px"; hole.style.height=(r.height+pad*2)+"px";
+    card.style.transform="none";
+    card.style.left=Math.max(12,Math.min(window.innerWidth-302, r.left))+"px";
+    if(window.innerHeight-r.bottom>210){ card.style.top=(r.bottom+14)+"px"; card.style.bottom="auto"; }
+    else { card.style.top="auto"; card.style.bottom=(window.innerHeight-r.top+14)+"px"; }
+  } else {
+    hole.style.display="none";
+    card.style.left="50%"; card.style.top="50%"; card.style.bottom="auto";
+    card.style.transform="translate(-50%,-50%)";
+  }
+}
+function startTour(){ _tourI=0; showTab("chat"); $("#tour").classList.remove("hidden"); positionTour(); }
+function endTour(){ $("#tour").classList.add("hidden"); localStorage.setItem("aath_onboarded","1"); }
+function maybeTour(){ if(!localStorage.getItem("aath_onboarded")) setTimeout(startTour, 800); }
+document.addEventListener("click",e=>{
+  if(e.target && e.target.id==="tourNext"){ _tourI++; (_tourI>=TOUR.length)?endTour():positionTour(); }
+  if(e.target && e.target.id==="tourSkip") endTour();
+});
 async function loadToday(){
   try{
     const t=await api("/today");
@@ -531,11 +589,21 @@ async function ensureNativeChannel(){
     _chanReady=true;
   }catch(e){ console.warn("createChannel failed", e); }
 }
+let _nativeListenerSet=false;
+async function initNativeListeners(){
+  const LN=getLN(); if(!LN || _nativeListenerSet) return;
+  _nativeListenerSet=true;
+  // Tapping a reminder/follow-up drops you straight into the chat to check in.
+  try{ await LN.addListener("localNotificationActionPerformed", ()=>{
+    showTab("chat"); loadNotifications(); loadToday();
+    const ci=$("#chatInput"); if(ci) ci.focus();
+  }); }catch(e){ console.warn("notif listener", e); }
+}
 async function ensureNativePerm(){
   const LN=getLN(); if(!LN) return false;
   let p=await LN.checkPermissions();
   if(p.display!=="granted") p=await LN.requestPermissions();
-  if(p.display==="granted") await ensureNativeChannel();
+  if(p.display==="granted"){ await ensureNativeChannel(); await initNativeListeners(); }
   return p.display==="granted";
 }
 async function syncNativeReminders(tasks){
@@ -553,9 +621,12 @@ async function syncNativeReminders(tasks){
       if(!(d.getHours()||d.getMinutes())) return;        // only timed tasks get an alarm
       if(at<=now) return;
       const base=_nId(t.id);
+      // One ping AT the time (no early pre-alert — we're a PA, not a to-do app).
       out.push({id:base, title:"AARTH", body:`“${t.title}” — it's time.`, channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(at), allowWhileIdle:true}});
-      if(at-now > 11*60000)                              // 10-min heads-up if far enough out
-        out.push({id:base+1000000000, title:"AARTH", body:`“${t.title}” in 10 minutes.`, channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(at-10*60000), allowWhileIdle:true}});
+      // Accountability follow-up ~1h later: opens the chat to check in on your list.
+      const fu=at+60*60000;
+      if(fu>now)
+        out.push({id:base+1000000000, title:"AARTH", body:`“${t.title}” done? Tap to check in on your list.`, channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(fu), allowWhileIdle:true}});
     });
     if(out.length) await LN.schedule({notifications:out});
   }catch(e){ console.warn("native reminders failed", e); }
