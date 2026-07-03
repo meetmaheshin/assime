@@ -98,13 +98,15 @@ class Settings(BaseSettings):
     # --- Cartesia (voice TTS + STT) ---
     cartesia_api_key: str = ""
     cartesia_version: str = "2024-11-13"
-    cartesia_tts_model: str = "sonic-2"
+    cartesia_tts_model: str = "sonic-3"  # sonic-2/sonic/-english were sunsetted
     cartesia_stt_model: str = "ink-whisper"
     cartesia_stt_language: str = ""  # "" = auto-detect (supports Hindi + English)
 
     # --- Deepgram (STT — better Hindi/Hinglish than Whisper) ---
     deepgram_api_key: str = ""
-    deepgram_model: str = "nova-2"
+    # nova-3 is required for real multilingual code-switching (Hinglish); nova-2
+    # + multi only transcribes English and drops the Hindi.
+    deepgram_model: str = "nova-3"
     deepgram_language: str = "multi"  # code-switching: Hindi + English
     # auto = Deepgram if a key is set, else Cartesia
     stt_provider: str = "auto"
