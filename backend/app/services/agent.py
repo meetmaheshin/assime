@@ -230,10 +230,9 @@ async def run(
         "outside what you do and steer back to their tasks (e.g. \"That's not "
         "really my thing — I'm here for your tasks and reminders. Anything to add "
         "or check?\"). Never produce long or general-purpose content.\n"
-        + ("LANGUAGE (most important): the user's preferred language is HINDI — reply "
-           "in natural Hindi/Hinglish (Devanagari or roman, matching how they type). "
-           "Default to Hindi for greetings and proactive lines. Only use English if "
-           "they clearly write full English.\n"
+        + ("LANGUAGE (most important): the user chose HINDI. ALWAYS reply in natural "
+           "Hindi/Hinglish (Devanagari or roman script, whatever reads naturally), "
+           "EVEN IF they type in English. Never reply in plain English.\n"
            if user.language == "hi" else
            "LANGUAGE (most important): reply in the EXACT language of the user's latest "
            "message. Default to English, but Hinglish in -> Hinglish out; Hindi -> "

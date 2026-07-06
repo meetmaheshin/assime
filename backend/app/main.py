@@ -47,7 +47,7 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         # Bump `version` on meaningful changes so we can confirm what's deployed.
         return {
-            "status": "ok", "env": settings.env, "version": "build-39",
+            "status": "ok", "env": settings.env, "version": "build-40",
             "llm_provider": settings.resolved_provider,
             "reasoning_model": settings.azure_deployment_reasoning,
             "api_mode": "v1" if settings.azure_v1_base else "classic",
