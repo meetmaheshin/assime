@@ -102,6 +102,17 @@
   .tourskip{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer}
   .tournext{background:var(--accent);color:#111;border:none;border-radius:10px;
     padding:9px 20px;font-weight:700;font-size:14px;cursor:pointer}
+  .langoverlay{position:absolute;inset:0;z-index:300;background:rgba(6,8,12,.92);
+    display:flex;align-items:center;justify-content:center}
+  .langoverlay.hidden{display:none}
+  .langcard{background:var(--surface2);border:1px solid var(--line);border-radius:20px;
+    padding:26px 22px;width:82%;max-width:320px;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.55)}
+  .langtitle{font-size:19px;font-weight:800;color:var(--accent)}
+  .langsub{font-size:15px;color:var(--muted);margin:4px 0 18px}
+  .langbtn{display:block;width:100%;padding:15px;margin-top:12px;border-radius:14px;
+    border:1px solid var(--line);background:var(--surface);color:var(--text);
+    font-size:17px;font-weight:700;cursor:pointer}
+  .langbtn:active{transform:scale(.98)}
   .capbubble{position:absolute;right:16px;bottom:152px;z-index:25;max-width:74%;
     background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;
     font-size:14px;line-height:1.4;box-shadow:0 12px 30px rgba(0,0,0,.55)}
@@ -314,6 +325,11 @@
 
           <div class="stack" style="margin-top:0;gap:14px">
             <div><label class="slabel">Your name</label><input id="setName" /></div>
+            <div><label class="slabel">Language / भाषा</label>
+              <select id="setLang">
+                <option value="en">English</option>
+                <option value="hi">हिंदी (Hindi)</option>
+              </select></div>
             <div><label class="slabel">Assistant's name</label><input id="setAsst" placeholder="e.g. AARTH, Maya, Jarvis" /></div>
             <div><label class="slabel">Time zone</label>
               <select id="setTz">
@@ -351,6 +367,16 @@
     </div>
 
     <div id="toast" class="toast hidden"></div>
+
+    <!-- First-open language choice -->
+    <div id="langOverlay" class="langoverlay hidden">
+      <div class="langcard">
+        <div class="langtitle">Choose your language</div>
+        <div class="langsub">अपनी भाषा चुनें</div>
+        <button class="langbtn" id="langEn">English</button>
+        <button class="langbtn" id="langHi">हिंदी</button>
+      </div>
+    </div>
 
     <!-- First-login walkthrough (once per lifetime) -->
     <div id="tour" class="tour hidden">
@@ -505,9 +531,19 @@ async function enterApp(){
   loadNotifications();
   if(notifTimer) clearInterval(notifTimer);
   notifTimer=setInterval(loadNotifications, 30000);  // proactive polling
-  maybeTour();  // one-time first-login walkthrough
   initWidgetLinks();  // home-screen widget deep links
+  const me=await getMe();
+  if(me && !me.language){ $("#langOverlay").classList.remove("hidden"); }  // first-open language choice
+  else { maybeTour(); }
 }
+async function pickLanguage(lang){
+  try{ const me=await api("/auth/me/settings",{method:"PATCH",body:{language:lang}}); _meCache=me; }catch(_){}
+  $("#langOverlay").classList.add("hidden");
+  loadToday();      // reschedule native notifications in the chosen language
+  maybeTour();      // then the walkthrough
+}
+$("#langEn").onclick=()=>pickLanguage("en");
+$("#langHi").onclick=()=>pickLanguage("hi");
 
 /* Home-screen widget deep links (aarth://action/add|voice|open) → open chat. */
 let _widgetHooked=false;
@@ -631,6 +667,8 @@ async function syncNativeReminders(tasks){
     const pend = await LN.getPending();
     if(pend.notifications && pend.notifications.length)
       await LN.cancel({notifications: pend.notifications.map(n=>({id:n.id}))});
+    const me=await getMe();
+    const hi = me && me.language==="hi";
     const now=Date.now(), out=[];
     (tasks||[]).forEach(t=>{
       if(t.status==="completed" || !t.deadline) return;
@@ -639,19 +677,18 @@ async function syncNativeReminders(tasks){
       if(at<=now) return;
       const base=_nId(t.id);
       // One ping AT the time (no early pre-alert — we're a PA, not a to-do app).
-      out.push({id:base, title:"AARTH", body:`“${t.title}” — it's time.`, channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(at), allowWhileIdle:true}});
+      out.push({id:base, title:"AARTH", body: hi?`“${t.title}” — का समय हो गया।`:`“${t.title}” — it's time.`, channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(at), allowWhileIdle:true}});
       // Accountability follow-up ~1h later: opens the chat to check in on your list.
       const fu=at+60*60000;
       if(fu>now)
-        out.push({id:base+1000000000, title:"AARTH", body:`“${t.title}” done? Tap to check in on your list.`, channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(fu), allowWhileIdle:true}});
+        out.push({id:base+1000000000, title:"AARTH", body: hi?`“${t.title}” हो गया? अपनी लिस्ट देखने के लिए टैप करें।`:`“${t.title}” done? Tap to check in on your list.`, channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(fu), allowWhileIdle:true}});
     });
     // Daily morning brief + evening review — repeat at the user's set hours so they
     // fire even with the app fully closed (fully native, no web push).
-    const me=await getMe();
     if(me){
       const hh=(h,d)=>(typeof h==="number"?h:d);
-      out.push({id:2000000001, title:"Good morning ☀️", body:"Here's your day — tap to see what's on and get started.", channelId:NCHAN, sound:NSOUND, schedule:{on:{hour:hh(me.morning_hour,8), minute:0}, allowWhileIdle:true}});
-      out.push({id:2000000002, title:"Evening review", body:"How did today go? Tap to check in on what's still pending.", channelId:NCHAN, sound:NSOUND, schedule:{on:{hour:hh(me.evening_hour,20), minute:0}, allowWhileIdle:true}});
+      out.push({id:2000000001, title: hi?"सुप्रभात ☀️":"Good morning ☀️", body: hi?"आज का दिन देखने के लिए टैप करें।":"Here's your day — tap to see what's on and get started.", channelId:NCHAN, sound:NSOUND, schedule:{on:{hour:hh(me.morning_hour,8), minute:0}, allowWhileIdle:true}});
+      out.push({id:2000000002, title: hi?"शाम की समीक्षा":"Evening review", body: hi?"आज कैसा रहा? क्या बाकी है देखने के लिए टैप करें।":"How did today go? Tap to check in on what's still pending.", channelId:NCHAN, sound:NSOUND, schedule:{on:{hour:hh(me.evening_hour,20), minute:0}, allowWhileIdle:true}});
     }
     if(out.length) await LN.schedule({notifications:out});
   }catch(e){ console.warn("native reminders failed", e); }
@@ -1008,6 +1045,7 @@ async function loadSettings(){
   ringEnabled = me.ring_enabled;
   $("#setName").value = me.display_name;
   $("#setAsst").value = me.assistant_name || "AARTH";
+  $("#setLang").value = me.language || "en";
   // ensure current tz is an option
   if(![...$("#setTz").options].some(o=>o.value===me.timezone)){
     const o=document.createElement("option"); o.textContent=me.timezone; $("#setTz").appendChild(o);
@@ -1066,6 +1104,7 @@ $("#saveSettings").onclick=async()=>{
     quiet_hours_start:parseInt($("#setQFrom").value),
     quiet_hours_end:parseInt($("#setQTo").value),
     ring_enabled: !$("#setNoRing").checked,
+    language: $("#setLang").value,
   };
   try{
     const me=await api("/auth/me/settings",{method:"PATCH",body});

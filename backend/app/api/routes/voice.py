@@ -33,7 +33,8 @@ async def voice_status() -> dict:
 async def tts(payload: TTSRequest, user: User = Depends(get_current_user)):
     # Stream so the browser can start playing before the whole clip is ready.
     return StreamingResponse(
-        voice_svc.tts_stream(payload.text), media_type="audio/mpeg"
+        voice_svc.tts_stream(payload.text, user.language or "en"),
+        media_type="audio/mpeg",
     )
 
 

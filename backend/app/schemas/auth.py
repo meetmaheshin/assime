@@ -34,6 +34,7 @@ class UserOut(BaseModel):
     morning_hour: int
     evening_hour: int
     ring_enabled: bool
+    language: str
     created_at: datetime
 
 
@@ -46,3 +47,4 @@ class SettingsUpdate(BaseModel):
     morning_hour: int | None = Field(default=None, ge=0, le=23)
     evening_hour: int | None = Field(default=None, ge=0, le=23)
     ring_enabled: bool | None = None
+    language: str | None = Field(default=None, pattern="^(en|hi)$")

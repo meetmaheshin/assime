@@ -57,6 +57,8 @@ async def _accountability_message(user: User, open_tasks, now: datetime, mode: s
         "it's fine to call out something that's slipping. No bullet lists, no "
         "emojis, no corporate tone. Sound like a real person who genuinely wants "
         "them to succeed and won't let them off the hook."
+        + (" Write the message in natural Hindi/Hinglish."
+           if user.language == "hi" else " Write in English.")
     )
     know = f"What you know about {user.display_name}:\n{profile}\n\n" if profile else ""
     prompt = (f"{when} {know}{user.display_name}'s still-open items:\n{tasklist}\n\n"

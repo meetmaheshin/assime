@@ -38,6 +38,8 @@ class User(Base, UUIDMixin, TimestampMixin):
     evening_hour: Mapped[int] = mapped_column(default=20, nullable=False)  # review time (8pm)
     # When False, call-level nudges don't ring/vibrate (still show as a badge).
     ring_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Preferred language for chat + voice: "en" | "hi". Empty until they pick one.
+    language: Mapped[str] = mapped_column(String(8), default="", nullable=False)
 
     projects: Mapped[list[Project]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

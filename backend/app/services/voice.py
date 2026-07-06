@@ -45,7 +45,7 @@ class VoiceError(RuntimeError):
     pass
 
 
-def _tts_payload(text: str) -> dict:
+def _tts_payload(text: str, lang: str = "en") -> dict:
     return {
         "model_id": settings.resolved_tts_model,
         "transcript": text,
@@ -55,11 +55,11 @@ def _tts_payload(text: str) -> dict:
             "sample_rate": 44100,
             "bit_rate": 128000,
         },
-        "language": "en",
+        "language": "hi" if lang == "hi" else "en",
     }
 
 
-async def tts_stream(text: str):
+async def tts_stream(text: str, lang: str = "en"):
     """Stream MP3 audio from Cartesia as it's generated (low latency).
 
     Yields byte chunks; the browser plays them progressively via MediaSource.
@@ -72,7 +72,7 @@ async def tts_stream(text: str):
         async with httpx.AsyncClient(timeout=60) as client:
             async with client.stream(
                 "POST", f"{_BASE}/tts/bytes", headers=_headers(),
-                json=_tts_payload(text),
+                json=_tts_payload(text, lang),
             ) as resp:
                 if resp.status_code != 200:
                     body = (await resp.aread())[:300].decode("utf-8", "replace")
