@@ -629,7 +629,7 @@ function _nId(uuid){ let h=0; for(const c of uuid) h=(h*31+c.charCodeAt(0))|0; r
 // High-importance channel with AARTH's signature sound -> heads-up banner + tone
 // like a messenger app. Bump the id if the sound file ever changes (Android
 // locks a channel's sound at creation time).
-const NCHAN="aarth-alerts-v1", NSOUND="aarth_alert.wav";
+const NCHAN="aarth-calls-v1", NSOUND="aarth_ring.wav";
 let _chanReady=false;
 async function ensureNativeChannel(){
   const LN=getLN(); if(!LN || _chanReady) return;
