@@ -15,6 +15,7 @@ from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.models.conversation import ConversationTurn
+from app.models.task import Task
 from app.models.user import User
 from app.schemas.chat import (
     ChatRequest,
@@ -82,6 +83,15 @@ async def chat(
     hits = await memory_service.search(
         db, llm, user_id=user.id, query=payload.message, limit=8
     )
+    # Drop memories whose task is already completed — a done task shouldn't linger
+    # in "based on what you've told me" or be fed to the agent as live context.
+    task_src = [m.source_id for m, _ in hits if m.source_type == "task" and m.source_id]
+    if task_src:
+        done = set(await db.scalars(
+            select(Task.id).where(Task.id.in_(task_src), Task.status == "completed")))
+        if done:
+            hits = [(m, s) for (m, s) in hits
+                    if not (m.source_type == "task" and m.source_id in done)]
 
     actions: list = []
     if settings.resolved_provider == "stub":
