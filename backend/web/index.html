@@ -113,6 +113,10 @@
     border:1px solid var(--line);background:var(--surface);color:var(--text);
     font-size:17px;font-weight:700;cursor:pointer}
   .langbtn:active{transform:scale(.98)}
+  .conrow{display:flex;justify-content:space-between;align-items:center;gap:8px;
+    padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .chip-from{display:inline-block;background:var(--surface);border:1px solid var(--line);
+    border-radius:8px;padding:1px 7px;font-size:11px;color:var(--accent);margin-left:6px}
   .capbubble{position:absolute;right:16px;bottom:152px;z-index:25;max-width:74%;
     background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;
     font-size:14px;line-height:1.4;box-shadow:0 12px 30px rgba(0,0,0,.55)}
@@ -247,6 +251,7 @@
           <div id="overdueBanner"></div>
           <div class="h">Your tasks</div>
           <div id="priorities"><div class="muted">Nothing yet.</div></div>
+          <div id="delegatedBox"></div>
         </div>
       </section>
 
@@ -349,6 +354,15 @@
             <div id="nativeStatus" class="muted" style="font-size:12px;min-height:14px"></div>
             <button class="btn-primary" id="saveSettings">Save settings</button>
             <div id="setStatus" class="muted" style="font-size:13px;min-height:16px"></div>
+            <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
+            <label class="slabel">People you can delegate to</label>
+            <div class="muted" style="font-size:13px;margin-top:-6px">Connect, then assign tasks by chatting — “ask Priya to send the deck”.</div>
+            <div style="display:flex;gap:8px">
+              <input id="connEmail" placeholder="their email" style="flex:1" />
+              <button class="btn-sm" id="connBtn" style="width:auto;padding:9px 16px">Connect</button>
+            </div>
+            <div id="connStatus" class="muted" style="font-size:12px;min-height:14px"></div>
+            <div id="connList"></div>
             <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
             <label class="slabel">What AARTH knows about you</label>
             <div id="profileBox" class="muted" style="font-size:13px;line-height:1.5;white-space:pre-wrap;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:12px">Loading…</div>
@@ -614,6 +628,7 @@ async function loadToday(){
     const open=all.filter(x=>x.status!=="completed")
       .sort((a,b)=> a.priority-b.priority || ((a.deadline||"~")>(b.deadline||"~")?1:-1));
     renderPriorities(open);
+    loadDelegated();
     syncNativeReminders(all);   // schedule on-device alarms (native app only)
     if(!$("#chatlog").children.length){
       addMsg("ai", t.greeting+(t.priorities.length?` Your top priority is “${t.priorities[0].title}”. Want to start there?`:" What would you like to get done today?"),[],true);
@@ -735,6 +750,19 @@ $("#testNativeBtn").onclick=async()=>{
     }
   }catch(e){ el.textContent="Schedule failed: "+(e.message||e); }
 };
+async function loadDelegated(){
+  const box=$("#delegatedBox"); if(!box) return;
+  let rows; try{ rows=await api("/delegated"); }catch(_){ box.innerHTML=""; return; }
+  const open=(rows||[]).filter(r=>r.status!=="completed");
+  if(!open.length){ box.innerHTML=""; return; }
+  box.innerHTML='<div class="h" style="margin-top:16px">Delegated by me</div>'+open.map(r=>{
+    const when=r.deadline?" · 📅 "+fmtWhen(r.deadline):"";
+    return `<div class="task"><div class="t-title">${h(r.title)}</div>
+      <div class="t-meta">👤 ${h(r.assignee_name)} · <span style="color:var(--accent)">${r.status}</span>${when}</div>
+      <div class="t-actions"><button class="btn-sm" data-rev="${r.id}">Take back</button></div></div>`;
+  }).join("");
+  box.querySelectorAll("[data-rev]").forEach(b=>b.onclick=async()=>{ await api(`/tasks/${b.dataset.rev}/revoke`,{method:"POST"}); toast("Taken back"); loadToday(); });
+}
 function fmtWhen(iso){
   const d=new Date(iso);
   const date=d.toLocaleDateString([], {month:"short",day:"numeric"});
@@ -749,11 +777,15 @@ function renderPriorities(list){
   box.innerHTML="";
   list.forEach(t=>{
     const el=document.createElement("div"); el.className="task";
-    el.innerHTML=`<div class="t-title">${h(t.title)}</div>
+    const from = t.assigned_by_name ? `<span class="chip-from">👤 from ${h(t.assigned_by_name)}</span>` : "";
+    const ret = t.assigned_by_name ? `<button class="btn-sm btn-return" data-ret="${t.id}">↩ Return</button>` : "";
+    el.innerHTML=`<div class="t-title">${h(t.title)}${from}</div>
       <div class="t-meta"><span class="dot p${t.priority}"></span>P${t.priority}
       ${t.reason?`· 🎯 ${h(t.reason)}`:""}${t.deadline?`· 📅 ${fmtWhen(t.deadline)}`:""}</div>
-      <div class="t-actions"><button class="btn-sm btn-done" data-id="${t.id}">✓ Mark done</button></div>`;
-    el.querySelector("button").onclick=async ev=>{await api(`/tasks/${ev.target.dataset.id}/complete`,{method:"POST"});loadToday();};
+      <div class="t-actions"><button class="btn-sm btn-done" data-id="${t.id}">✓ Mark done</button>${ret}</div>`;
+    el.querySelector(".btn-done").onclick=async ev=>{await api(`/tasks/${ev.target.dataset.id}/complete`,{method:"POST"});loadToday();};
+    const rb=el.querySelector(".btn-return");
+    if(rb) rb.onclick=async()=>{ await api(`/tasks/${rb.dataset.ret}/return`,{method:"POST"}); toast("Returned to sender"); loadToday(); };
     box.appendChild(el);
   });
 }
@@ -1085,8 +1117,34 @@ async function loadSettings(){
   $("#setStatus").textContent="";
   showNativeStatus();
   loadProfile();
+  loadConnections();
   try{ const hv=await api("/health"); $("#appVersion").textContent="Version: "+(hv.version||"?"); }catch(_){}
 }
+async function loadConnections(){
+  const box=$("#connList"); if(!box) return;
+  let d; try{ d=await api("/connections"); }catch(_){ return; }
+  const nm=c=>h(c.user?c.user.name:"?");
+  let html="";
+  if(d.incoming.length){
+    html+='<div class="h" style="margin-top:8px">Requests</div>';
+    d.incoming.forEach(c=>{ html+=`<div class="conrow"><span>${nm(c)} wants to connect</span><span><button class="btn-sm" data-acc="${c.conn_id}">Accept</button> <button class="btn-sm" data-dec="${c.conn_id}">Decline</button></span></div>`; });
+  }
+  if(d.connected.length){
+    html+='<div class="h" style="margin-top:8px">Connected</div>';
+    d.connected.forEach(c=>{ html+=`<div class="conrow"><span>👤 ${nm(c)}</span><button class="btn-sm" data-rem="${c.conn_id}">Remove</button></div>`; });
+  }
+  if(d.outgoing.length) html+='<div class="muted" style="font-size:12px;margin-top:6px">Sent, waiting: '+d.outgoing.map(nm).join(", ")+'</div>';
+  box.innerHTML=html || '<div class="muted" style="font-size:13px">No connections yet.</div>';
+  box.querySelectorAll("[data-acc]").forEach(b=>b.onclick=async()=>{ await api(`/connections/${b.dataset.acc}/accept`,{method:"POST"}); loadConnections(); });
+  box.querySelectorAll("[data-dec]").forEach(b=>b.onclick=async()=>{ await api(`/connections/${b.dataset.dec}/decline`,{method:"POST"}); loadConnections(); });
+  box.querySelectorAll("[data-rem]").forEach(b=>b.onclick=async()=>{ await api(`/connections/${b.dataset.rem}/remove`,{method:"POST"}); loadConnections(); });
+}
+$("#connBtn").onclick=async()=>{
+  const email=$("#connEmail").value.trim(); if(!email) return;
+  const el=$("#connStatus"); el.textContent="Sending…";
+  try{ const r=await api("/connections/request",{method:"POST",body:{email}}); el.textContent=r.message||"Sent."; $("#connEmail").value=""; loadConnections(); }
+  catch(e){ el.textContent = e.message||"Couldn't send — is that email on AARTH?"; }
+};
 async function loadProfile(){
   const box=$("#profileBox"); if(!box) return;
   try{ const p=await api("/auth/me/profile");
