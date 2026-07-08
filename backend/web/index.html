@@ -575,6 +575,7 @@ async function enterApp(){
   if(notifTimer) clearInterval(notifTimer);
   notifTimer=setInterval(()=>{ loadNotifications(); updateConnectBadge(); }, 30000);  // proactive polling
   initWidgetLinks();  // home-screen widget deep links
+  initPush();         // FCM push so closed-app events (assign/complete/…) reach the phone
   acceptPendingInvite();  // ?invite=CODE from a shared connect link
   const me=await getMe();
   if(me && !me.language){ $("#langOverlay").classList.remove("hidden"); }  // first-open language choice
@@ -605,6 +606,22 @@ function handleWidgetAction(url){
   showTab("chat");
   if(url.indexOf("voice")>=0){ const m=$("#micBtn"); if(m) setTimeout(()=>m.click(),450); }
   else { const ci=$("#chatInput"); if(ci) setTimeout(()=>ci.focus(),200); }
+}
+let _pushHooked=false;
+async function initPush(){
+  const PN = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
+  if(!PN || !token) return;
+  try{
+    let p=await PN.checkPermissions();
+    if(p.receive!=="granted") p=await PN.requestPermissions();
+    if(p.receive!=="granted") return;
+    if(!_pushHooked){ _pushHooked=true;
+      PN.addListener("registration", t=>{ try{ api("/push/fcm/register",{method:"POST",body:{token:t.value}}); }catch(_){} });
+      PN.addListener("registrationError", e=>console.warn("push reg error", e));
+      PN.addListener("pushNotificationActionPerformed", ()=>{ showTab("chat"); loadNotifications(); loadToday(); updateConnectBadge(); });
+    }
+    await PN.register();
+  }catch(e){ console.warn("initPush", e); }
 }
 function initWidgetLinks(){
   const App = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
@@ -691,6 +708,10 @@ async function ensureNativeChannel(){
     await LN.createChannel({ id:NCHAN, name:"AARTH reminders",
       description:"Task reminders and daily check-ins", importance:5,
       visibility:1, sound:NSOUND, vibration:true, lights:true, lightColor:"#ff7a00" });
+    // Channel used by FCM pushes (assignments, completions, connection events).
+    await LN.createChannel({ id:"aarth-fcm", name:"AARTH updates",
+      description:"Task assignments and updates from people", importance:5,
+      visibility:1, vibration:true, lights:true, lightColor:"#ff7a00" });
     _chanReady=true;
   }catch(e){ console.warn("createChannel failed", e); }
 }

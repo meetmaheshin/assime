@@ -156,6 +156,14 @@ class Settings(BaseSettings):
     def push_enabled(self) -> bool:
         return bool(self.vapid_public_key and self.vapid_private_key_b64)
 
+    # --- Firebase Cloud Messaging (native push to closed apps) ---
+    # Full service-account JSON as a string (set on Railway as a secret).
+    firebase_service_account_json: str = ""
+
+    @property
+    def fcm_enabled(self) -> bool:
+        return bool(self.firebase_service_account_json.strip())
+
     # Cost guardrail
     daily_token_budget: int = 200_000
 

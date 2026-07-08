@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.notification import Notification
 from app.models.user import User
-from app.services import nudges, push
+from app.services import fcm_service, nudges, push
 
 _scheduler: AsyncIOScheduler | None = None
 
@@ -29,9 +29,10 @@ async def _tick() -> None:
             except Exception:
                 logging.exception("nudge generation failed for %s", user.id)
 
-            if not settings.push_enabled:
+            if not (settings.fcm_enabled or settings.push_enabled):
                 continue
-            # Push recent, still-pending, not-yet-pushed nudges (once each).
+            # Deliver recent, still-pending, not-yet-pushed notifications (once each)
+            # to the phone — native FCM preferred, web push as fallback.
             pending = list(await db.scalars(
                 select(Notification).where(
                     Notification.user_id == user.id,
@@ -41,7 +42,10 @@ async def _tick() -> None:
                 )))
             for n in pending:
                 try:
-                    await push.push_to_user(db, user.id, n.title, n.body)
+                    if settings.fcm_enabled:
+                        await fcm_service.send_to_user(db, user.id, n.title, n.body)
+                    elif settings.push_enabled:
+                        await push.push_to_user(db, user.id, n.title, n.body)
                 except Exception:
                     logging.exception("push failed for notification %s", n.id)
                 n.pushed = True
@@ -51,7 +55,7 @@ async def _tick() -> None:
 
 def start_scheduler() -> None:
     global _scheduler
-    if _scheduler is not None or not settings.push_enabled:
+    if _scheduler is not None or not (settings.fcm_enabled or settings.push_enabled):
         return
     _scheduler = AsyncIOScheduler(timezone="UTC")
     _scheduler.add_job(_tick, "interval", seconds=60, id="nudge_push",

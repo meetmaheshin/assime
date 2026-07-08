@@ -12,7 +12,8 @@
     "@capacitor/app": "^8.1.0",
     "@capacitor/cli": "^8.4.1",
     "@capacitor/core": "^8.4.1",
-    "@capacitor/local-notifications": "^8.2.0"
+    "@capacitor/local-notifications": "^8.2.0",
+    "@capacitor/push-notifications": "^8.1.1"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5"
