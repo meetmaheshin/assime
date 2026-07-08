@@ -48,11 +48,32 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         # Bump `version` on meaningful changes so we can confirm what's deployed.
         return {
-            "status": "ok", "env": settings.env, "version": "build-47",
+            "status": "ok", "env": settings.env, "version": "build-48",
             "llm_provider": settings.resolved_provider,
             "reasoning_model": settings.azure_deployment_reasoning,
             "api_mode": "v1" if settings.azure_v1_base else "classic",
         }
+
+    @app.get("/health/llm", tags=["meta"], include_in_schema=False)
+    async def health_llm() -> dict:
+        from app.services.agent import TOOLS
+        from app.services.llm import build_chat_client, chat_create
+        info = {"model": settings.azure_deployment_reasoning}
+        try:
+            client, model = build_chat_client()
+            resp = await chat_create(
+                client, model,
+                messages=[{"role": "user", "content": "remind me to call bank at 4pm"}],
+                tools=TOOLS, tool_choice="auto")
+            info["ok"] = True
+            info["used_model"] = resp.model
+            m = resp.choices[0].message
+            info["reply"] = (m.content or "")[:60]
+            info["tool_calls"] = [t.function.name for t in (m.tool_calls or [])]
+        except Exception as e:  # noqa: BLE001
+            info["ok"] = False
+            info["error"] = f"{type(e).__name__}: {str(e)[:400]}"
+        return info
 
     app.include_router(auth.router)
     app.include_router(projects.router)
