@@ -124,6 +124,9 @@
   /* Notifications */
   .badge{position:absolute;top:-4px;right:-4px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;
     background:var(--danger);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface)}
+  .navbadge{position:absolute;top:4px;right:22px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;
+    background:var(--danger);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .navbadge.hidden{display:none}
   .notif{background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
   .notif.overdue{border-color:rgba(248,81,73,.5)}
   .notif .n-title{font-weight:700;font-size:15px;display:flex;align-items:center;gap:7px}
@@ -435,7 +438,7 @@
     <nav class="bottomnav">
       <button class="nav active" data-tab="chat"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span>Chat</button>
       <button class="nav" data-tab="today"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>Tasks</button>
-      <button class="nav" data-tab="connect"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg></span>Connect</button>
+      <button class="nav" data-tab="connect" style="position:relative"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg></span>Connect<span id="connectBadge" class="navbadge hidden">0</span></button>
     </nav>
 
     <!-- INCOMING CALL-STYLE REMINDER -->
@@ -568,8 +571,9 @@ async function enterApp(){
   await loadToday();               // populates Today + posts greeting only if chat is empty
   showTab("chat");                 // chat is the home screen — a conversation first
   loadNotifications();
+  updateConnectBadge();
   if(notifTimer) clearInterval(notifTimer);
-  notifTimer=setInterval(loadNotifications, 30000);  // proactive polling
+  notifTimer=setInterval(()=>{ loadNotifications(); updateConnectBadge(); }, 30000);  // proactive polling
   initWidgetLinks();  // home-screen widget deep links
   acceptPendingInvite();  // ?invite=CODE from a shared connect link
   const me=await getMe();
@@ -1154,12 +1158,20 @@ async function loadSettings(){
   loadProfile();
   try{ const hv=await api("/health"); $("#appVersion").textContent="Version: "+(hv.version||"?"); }catch(_){}
 }
+function setConnectBadge(n){
+  const b=$("#connectBadge"); if(!b) return;
+  if(n>0){ b.textContent=n; b.classList.remove("hidden"); } else b.classList.add("hidden");
+}
+async function updateConnectBadge(){
+  try{ const d=await api("/connections"); setConnectBadge((d.incoming||[]).length); }catch(_){}
+}
 async function loadConnections(){
   const box=$("#connList"); if(!box) return;
   const me=await getMe();
   const hf=$("#myHandle");
   if(me && hf && document.activeElement!==hf) hf.value=me.handle||"";  // don't clobber while typing
   let d; try{ d=await api("/connections"); }catch(_){ return; }
+  setConnectBadge((d.incoming||[]).length);
   const nm=c=>h(c.user?c.user.name:"?");
   let html="";
   if(d.incoming.length){
