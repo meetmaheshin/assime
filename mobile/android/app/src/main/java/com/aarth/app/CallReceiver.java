@@ -8,16 +8,20 @@ import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioAttributes;
+import android.net.Uri;
 import android.os.Build;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
 /** Fires at the scheduled time and posts a full-screen-intent notification that
- *  launches CallActivity (rings over the lock screen). Reschedules daily if asked. */
+ *  launches CallActivity (rings over the lock screen). If full-screen isn't
+ *  allowed, falls back to a ringing heads-up notification. Reschedules daily. */
 public class CallReceiver extends BroadcastReceiver {
 
-    static final String CHANNEL = "aarth-fs-call-v1";
+    static final String CHANNEL_FS = "aarth-fs-call-v1";     // silent; CallActivity rings
+    static final String CHANNEL_RING = "aarth-ring-v2";       // rings itself (fallback)
 
     @Override
     public void onReceive(Context ctx, Intent intent) {
@@ -28,7 +32,8 @@ public class CallReceiver extends BroadcastReceiver {
         if (title == null) title = "AARTH";
         if (body == null) body = "";
 
-        ensureChannel(ctx);
+        ensureChannels(ctx);
+        boolean fs = canFullScreen(ctx);
 
         Intent full = new Intent(ctx, CallActivity.class);
         full.putExtra("body", body);
@@ -37,18 +42,18 @@ public class CallReceiver extends BroadcastReceiver {
         PendingIntent fsPi = PendingIntent.getActivity(ctx, notifId, full,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        Notification n = new NotificationCompat.Builder(ctx, CHANNEL)
+        NotificationCompat.Builder b = new NotificationCompat.Builder(
+                ctx, fs ? CHANNEL_FS : CHANNEL_RING)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setFullScreenIntent(fsPi, true)
             .setContentIntent(fsPi)
-            .setAutoCancel(true)
-            .build();
+            .setAutoCancel(true);
+        if (fs) b.setFullScreenIntent(fsPi, true);
         try {
-            NotificationManagerCompat.from(ctx).notify(notifId, n);
+            NotificationManagerCompat.from(ctx).notify(notifId, b.build());
         } catch (SecurityException ignored) {}
 
         if (repeat > 0) {
@@ -56,18 +61,35 @@ public class CallReceiver extends BroadcastReceiver {
         }
     }
 
-    private static void ensureChannel(Context ctx) {
-        if (Build.VERSION.SDK_INT >= 26) {
+    private static boolean canFullScreen(Context ctx) {
+        if (Build.VERSION.SDK_INT >= 34) {
             NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm == null) return;
-            NotificationChannel ch = new NotificationChannel(
-                CHANNEL, "AARTH calls", NotificationManager.IMPORTANCE_HIGH);
-            ch.setDescription("Full-screen call-style reminders");
-            ch.setSound(null, null);          // CallActivity plays the ring; keep the notif silent
-            ch.enableVibration(false);
-            ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-            nm.createNotificationChannel(ch);
+            return nm != null && nm.canUseFullScreenIntent();
         }
+        return true;
+    }
+
+    private static void ensureChannels(Context ctx) {
+        if (Build.VERSION.SDK_INT < 26) return;
+        NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null) return;
+        NotificationChannel fs = new NotificationChannel(
+            CHANNEL_FS, "AARTH calls", NotificationManager.IMPORTANCE_HIGH);
+        fs.setDescription("Full-screen call-style reminders");
+        fs.setSound(null, null);              // CallActivity plays the ring
+        fs.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        nm.createNotificationChannel(fs);
+
+        NotificationChannel ring = new NotificationChannel(
+            CHANNEL_RING, "AARTH ringing reminders", NotificationManager.IMPORTANCE_HIGH);
+        ring.setDescription("Ringing reminders when full-screen isn't allowed");
+        Uri snd = Uri.parse("android.resource://" + ctx.getPackageName() + "/" + R.raw.aarth_ring);
+        ring.setSound(snd, new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+        ring.enableVibration(true);
+        ring.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        nm.createNotificationChannel(ring);
     }
 
     /** Schedule a call at an absolute epoch-ms time. repeat=0 for one-shot. */
