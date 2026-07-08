@@ -1,8 +1,8 @@
 """Connections API — the trust layer for delegation."""
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -14,7 +14,12 @@ router = APIRouter(prefix="/connections", tags=["connections"])
 
 
 class ConnectRequest(BaseModel):
-    email: EmailStr
+    email: str | None = None
+    handle: str | None = None
+
+
+class InviteAccept(BaseModel):
+    code: str
 
 
 @router.post("/request")
@@ -23,7 +28,37 @@ async def create_request(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    return await connections_service.request(db, user, payload.email)
+    return await connections_service.request(
+        db, user, email=payload.email, handle=payload.handle)
+
+
+@router.get("/search")
+async def search(
+    q: str = "",
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    return await connections_service.search(db, user, q)
+
+
+@router.get("/invite")
+async def my_invite(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    code = await connections_service.get_invite_code(db, user)
+    base = str(request.base_url).rstrip("/")
+    return {"code": code, "url": f"{base}/ui/?invite={code}"}
+
+
+@router.post("/invite/accept")
+async def accept_invite(
+    payload: InviteAccept,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    return await connections_service.accept_invite(db, user, payload.code)
 
 
 @router.get("")

@@ -35,6 +35,7 @@ class UserOut(BaseModel):
     evening_hour: int
     ring_enabled: bool
     language: str
+    handle: str | None = None
     created_at: datetime
 
 
@@ -48,3 +49,5 @@ class SettingsUpdate(BaseModel):
     evening_hour: int | None = Field(default=None, ge=0, le=23)
     ring_enabled: bool | None = None
     language: str | None = Field(default=None, pattern="^(en|hi)$")
+    # 3-24 chars a-z 0-9 _ ; empty string clears it. Normalized in the route.
+    handle: str | None = Field(default=None, max_length=25)

@@ -304,13 +304,30 @@
       <section class="screen" id="screen-connect">
         <div class="pad">
           <div class="greeting" style="font-size:20px">Connect</div>
-          <div class="muted" style="font-size:13px;margin-bottom:16px">Connect with people, then delegate by chatting — “ask Priya to send the deck”.</div>
+          <div class="muted" style="font-size:13px;margin-bottom:14px">Connect with people, then delegate by chatting — “ask Priya to send the deck”.</div>
+
+          <label class="slabel">Your @handle <span class="muted" style="font-weight:400">(so people can find you)</span></label>
+          <div style="display:flex;gap:8px">
+            <input id="myHandle" autocapitalize="off" autocomplete="off" placeholder="e.g. mahesh" style="flex:1" />
+            <button class="btn-sm" id="saveHandleBtn" style="width:auto;padding:9px 16px">Save</button>
+          </div>
+          <div id="handleStatus" class="muted" style="font-size:12px;min-height:14px"></div>
+
+          <label class="slabel" style="margin-top:10px">Find someone by @handle</label>
+          <input id="connSearch" autocapitalize="off" autocomplete="off" placeholder="type a handle…" />
+          <div id="searchResults" style="margin-top:6px"></div>
+
+          <label class="slabel" style="margin-top:10px">Or add by email</label>
           <div style="display:flex;gap:8px">
             <input id="connEmail" type="email" inputmode="email" autocomplete="email" autocapitalize="off" placeholder="their email" style="flex:1" />
             <button class="btn-sm" id="connBtn" style="width:auto;padding:9px 16px">Connect</button>
           </div>
           <div id="connStatus" class="muted" style="font-size:12px;min-height:14px"></div>
-          <div id="connList" style="margin-top:8px"></div>
+
+          <button class="btn-sm" id="inviteBtn" style="width:100%;margin-top:12px">🔗 Invite a friend (share link)</button>
+          <div id="inviteBox" class="muted" style="font-size:12px;word-break:break-all;margin-top:4px"></div>
+
+          <div id="connList" style="margin-top:14px"></div>
         </div>
       </section>
 
@@ -456,6 +473,7 @@
 const API="";
 let token=localStorage.getItem("aath_token")||null;
 let mode="login", pendingTask=null;
+try{ const _iv=new URLSearchParams(location.search).get("invite"); if(_iv) localStorage.setItem("aath_invite",_iv); }catch(_){}  // survive sign-up
 let voiceOn = localStorage.getItem("aath_voice") !== "off";  // AARTH speaks
 let ringEnabled = true;  // synced from server settings
 const $=s=>document.querySelector(s);
@@ -553,9 +571,17 @@ async function enterApp(){
   if(notifTimer) clearInterval(notifTimer);
   notifTimer=setInterval(loadNotifications, 30000);  // proactive polling
   initWidgetLinks();  // home-screen widget deep links
+  acceptPendingInvite();  // ?invite=CODE from a shared connect link
   const me=await getMe();
   if(me && !me.language){ $("#langOverlay").classList.remove("hidden"); }  // first-open language choice
   else { maybeTour(); }
+}
+async function acceptPendingInvite(){
+  let inv=null;
+  try{ inv=new URLSearchParams(location.search).get("invite")||localStorage.getItem("aath_invite"); }catch(_){}
+  if(!inv) return;
+  localStorage.removeItem("aath_invite");
+  try{ const r=await api("/connections/invite/accept",{method:"POST",body:{code:inv}}); if(r&&r.name){ toast("Connected with "+r.name); } }catch(_){}
 }
 async function pickLanguage(lang){
   try{ const me=await api("/auth/me/settings",{method:"PATCH",body:{language:lang}}); _meCache=me; }catch(_){}
@@ -570,6 +596,8 @@ $("#langHi").onclick=()=>pickLanguage("hi");
 let _widgetHooked=false;
 function handleWidgetAction(url){
   if(!url || !token) return;
+  const inv=url.match(/invite[\/=]([A-Za-z0-9_-]+)/);
+  if(inv){ api("/connections/invite/accept",{method:"POST",body:{code:inv[1]}}).then(r=>{ if(r&&r.name) toast("Connected with "+r.name); showTab("connect"); }).catch(()=>{}); return; }
   showTab("chat");
   if(url.indexOf("voice")>=0){ const m=$("#micBtn"); if(m) setTimeout(()=>m.click(),450); }
   else { const ci=$("#chatInput"); if(ci) setTimeout(()=>ci.focus(),200); }
@@ -1128,6 +1156,9 @@ async function loadSettings(){
 }
 async function loadConnections(){
   const box=$("#connList"); if(!box) return;
+  const me=await getMe();
+  const hf=$("#myHandle");
+  if(me && hf && document.activeElement!==hf) hf.value=me.handle||"";  // don't clobber while typing
   let d; try{ d=await api("/connections"); }catch(_){ return; }
   const nm=c=>h(c.user?c.user.name:"?");
   let html="";
@@ -1150,6 +1181,38 @@ $("#connBtn").onclick=async()=>{
   const el=$("#connStatus"); el.textContent="Sending…";
   try{ const r=await api("/connections/request",{method:"POST",body:{email}}); el.textContent=r.message||"Sent."; $("#connEmail").value=""; loadConnections(); }
   catch(e){ el.textContent = e.message||"Couldn't send — is that email on AARTH?"; }
+};
+/* Your handle */
+$("#saveHandleBtn").onclick=async()=>{
+  const el=$("#handleStatus"); el.textContent="Saving…";
+  try{ const me=await api("/auth/me/settings",{method:"PATCH",body:{handle:$("#myHandle").value.trim()}}); _meCache=me; el.textContent=me.handle?("You're findable as @"+me.handle):"Handle cleared."; }
+  catch(e){ el.textContent = e.message||"Couldn't save handle."; }
+};
+/* Handle search (opt-in users only) */
+let _searchTimer=null;
+$("#connSearch").oninput=e=>{
+  clearTimeout(_searchTimer);
+  const q=e.target.value.trim();
+  _searchTimer=setTimeout(async()=>{
+    const box=$("#searchResults");
+    if(q.replace("@","").length<2){ box.innerHTML=""; return; }
+    let res=[]; try{ res=await api("/connections/search?q="+encodeURIComponent(q)); }catch(_){}
+    if(!res.length){ box.innerHTML='<div class="muted" style="font-size:12px">No one found. They need to set a @handle to be findable.</div>'; return; }
+    box.innerHTML=res.map(u=>`<div class="conrow"><span>${h(u.name)} <span style="color:var(--accent)">@${h(u.handle)}</span></span><button class="btn-sm" data-h="${h(u.handle)}">Connect</button></div>`).join("");
+    box.querySelectorAll("[data-h]").forEach(b=>b.onclick=async()=>{
+      b.textContent="…"; try{ const r=await api("/connections/request",{method:"POST",body:{handle:b.dataset.h}}); b.textContent="Sent ✓"; toast(r.message||"Request sent"); loadConnections(); }
+      catch(e){ b.textContent="Connect"; toast(e.message||"Failed"); }
+    });
+  },300);
+};
+/* Invite link */
+$("#inviteBtn").onclick=async()=>{
+  const box=$("#inviteBox"); box.textContent="…";
+  try{ const r=await api("/connections/invite");
+    box.textContent=r.url;
+    if(navigator.share){ try{ await navigator.share({title:"Connect with me on AARTH", text:"Let's manage tasks together on AARTH:", url:r.url}); return; }catch(_){} }
+    try{ await navigator.clipboard.writeText(r.url); toast("Invite link copied — paste it anywhere"); }catch(_){ toast("Long-press to copy your invite link"); }
+  }catch(e){ box.textContent = e.message||"Couldn't create link."; }
 };
 async function loadProfile(){
   const box=$("#profileBox"); if(!box) return;

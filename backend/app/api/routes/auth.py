@@ -80,7 +80,12 @@ async def update_settings(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    handle = changes.pop("handle", None)
+    if "handle" in payload.model_fields_set:
+        from app.services import connections_service
+        await connections_service.set_handle(db, user, handle)  # normalize + uniqueness
+    for field, value in changes.items():
         setattr(user, field, value)
     await db.commit()
     await db.refresh(user)

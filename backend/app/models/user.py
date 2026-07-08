@@ -40,6 +40,14 @@ class User(Base, UUIDMixin, TimestampMixin):
     ring_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Preferred language for chat + voice: "en" | "hi". Empty until they pick one.
     language: Mapped[str] = mapped_column(String(8), default="", nullable=False)
+    # Opt-in public handle so people can find you in Connect search (NULL = not
+    # discoverable). invite_code backs a personal "connect with me" link.
+    handle: Mapped[str | None] = mapped_column(
+        String(24), unique=True, index=True, nullable=True
+    )
+    invite_code: Mapped[str | None] = mapped_column(
+        String(16), unique=True, index=True, nullable=True
+    )
 
     projects: Mapped[list[Project]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
