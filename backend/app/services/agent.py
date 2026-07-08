@@ -13,12 +13,15 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.task import Task, TaskHistory
 from app.models.user import User
-from app.services import memory_service, profile_service
+from app.services import (
+    connections_service, delegation_service, memory_service, profile_service,
+)
 from app.services.llm import build_chat_client, llm
 
 TOOLS = [
@@ -43,6 +46,28 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "title": {"type": "string", "description": "task title (fuzzy match ok)"},
         }, "required": ["title"]}}},
+    {"type": "function", "function": {
+        "name": "assign_task",
+        "description": "Delegate a task to a CONNECTED person — 'ask Priya to send "
+        "the deck', 'get Rahul to book the venue'. They must already be a connection.",
+        "parameters": {"type": "object", "properties": {
+            "title": {"type": "string"},
+            "to": {"type": "string", "description": "connection's name or email"},
+            "when": {"type": "string", "description": "ISO 8601 datetime or empty"},
+            "reason": {"type": "string", "description": "why it matters (optional)"},
+        }, "required": ["title", "to"]}}},
+    {"type": "function", "function": {
+        "name": "list_delegated",
+        "description": "List the tasks the user has assigned to other people and their "
+        "status (use for 'what did I hand off', 'did Priya do X').",
+        "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {
+        "name": "connect_person",
+        "description": "Send a connection request to someone by email so they can be "
+        "assigned tasks. Needs their email address.",
+        "parameters": {"type": "object", "properties": {
+            "email": {"type": "string"},
+        }, "required": ["email"]}}},
     {"type": "function", "function": {
         "name": "remember_fact",
         "description": "Save a durable fact or preference the user reveals about "
@@ -162,8 +187,62 @@ async def _complete_task(db, user, now, args) -> str:
     # Add history via the FK directly — appending to row.history would trigger an
     # illegal async lazy-load (history wasn't eager-loaded on this query).
     db.add(TaskHistory(task_id=row.id, event="completed"))
+    delegation_service.notify_completed(db, row, user)  # ping the delegator if assigned
     await db.commit()
     return f'Marked "{row.title}" done.'
+
+
+async def _assign_task(db, user, now, args) -> str:
+    title = (args.get("title") or "").strip()
+    to = (args.get("to") or "").strip()
+    if not title or not to:
+        return "Need a task and who to assign it to."
+    target = None
+    if "@" in to:
+        target = await connections_service.get_user_by_email(db, to)
+    if target is None:
+        conns = await connections_service.connected_users(db, user.id)
+        matches = [u for u in conns if to.lower() in u.display_name.lower()]
+        if len(matches) == 1:
+            target = matches[0]
+        elif len(matches) > 1:
+            return ("Which one? You're connected with "
+                    + ", ".join(u.display_name for u in matches))
+    if target is None:
+        return (f"You're not connected with “{to}”. Send them a connection request "
+                "first (I can do it if you give their email), then I'll assign it.")
+    try:
+        task = await delegation_service.assign(
+            db, user, target, title=title, reason=args.get("reason"),
+            deadline=_parse_dt(args.get("when"), now),
+            priority=args.get("priority") or 3)
+    except HTTPException as e:
+        return str(e.detail)
+    return f'Assigned “{task.title}” to {target.display_name}.'
+
+
+async def _list_delegated(db, user, now, args) -> str:
+    rows = list(await db.scalars(
+        select(Task).where(Task.assigned_by_id == user.id,
+                           Task.status != "completed")))
+    if not rows:
+        return "You haven't delegated anything that's still open."
+    ids = {t.user_id for t in rows}
+    names = {u.id: u.display_name
+             for u in await db.scalars(select(User).where(User.id.in_(ids)))}
+    return "You've delegated: " + "; ".join(
+        f'“{t.title}” → {names.get(t.user_id, "?")} ({t.status})' for t in rows)
+
+
+async def _connect_person(db, user, now, args) -> str:
+    email = (args.get("email") or "").strip()
+    if "@" not in email:
+        return "I need their email address to send a connection request."
+    try:
+        r = await connections_service.request(db, user, email)
+    except HTTPException as e:
+        return str(e.detail)
+    return r.get("message", "Request sent.")
 
 
 async def _remember_fact(db, user, now, args) -> str:
@@ -179,6 +258,9 @@ async def _remember_fact(db, user, now, args) -> str:
 _EXECUTORS = {
     "create_task": _create_task,
     "complete_task": _complete_task,
+    "assign_task": _assign_task,
+    "list_delegated": _list_delegated,
+    "connect_person": _connect_person,
     "remember_fact": _remember_fact,
 }
 
@@ -242,6 +324,9 @@ async def run(
         "tasks. Use create_task for all of them — put a specific time in `when` for "
         "anything that happens at a set time, leave it empty for an open to-do. If "
         "the user gives NO time, DON'T ask for one — just create the open to-do.\n"
+        "DELEGATION: to hand a task to someone else ('ask Priya to…', 'get Rahul "
+        "to…'), use assign_task — they must be a connection. connect_person(email) "
+        "sends a connection request; list_delegated shows what you've handed off.\n"
         "REASON like a PA: use the Current state and recent conversation to be "
         "genuinely useful — connect a new request to their existing tasks, flag "
         "clashes, tight timing, or prep needed, and check in on the status of "

@@ -22,7 +22,7 @@ from app.schemas.task import (
     TaskUpdate,
 )
 from app.services import capture as capture_svc
-from app.services import memory_service
+from app.services import delegation_service, memory_service
 from app.services.llm import llm
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -78,12 +78,23 @@ async def list_tasks(
     status_filter: str | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> list[Task]:
+) -> list[TaskOut]:
     stmt = select(Task).where(Task.user_id == user.id)
     if status_filter:
         stmt = stmt.where(Task.status == status_filter)
     stmt = stmt.order_by(Task.priority, Task.deadline.nulls_last())
-    return list(await db.scalars(stmt))
+    tasks = list(await db.scalars(stmt))
+    # Attach the delegator's name for "from X" chips on assigned-to-me tasks.
+    ids = {t.assigned_by_id for t in tasks if t.assigned_by_id}
+    names = {u.id: u.display_name for u in await db.scalars(
+        select(User).where(User.id.in_(ids)))} if ids else {}
+    out = []
+    for t in tasks:
+        o = TaskOut.model_validate(t)
+        if t.assigned_by_id:
+            o.assigned_by_name = names.get(t.assigned_by_id)
+        out.append(o)
+    return out
 
 
 @router.post("", response_model=TaskCreateResult, status_code=status.HTTP_201_CREATED)
@@ -234,8 +245,11 @@ async def update_task(
         setattr(task, field, value)
     if "status" in changes:
         _log(task, "status_changed", detail=changes["status"])
+        if changes["status"] == "completed":
+            delegation_service.notify_completed(db, task, user)
     if "deadline" in changes:
         _log(task, "deadline_moved")
+        delegation_service.notify_deadline_changed(db, task, user)
     await db.commit()
     await db.refresh(task)
     return task
@@ -253,6 +267,7 @@ async def complete_task(
     task.progress = 100
     task.completed_at = datetime.now(timezone.utc)
     _log(task, "completed")
+    delegation_service.notify_completed(db, task, user)  # tell the delegator, if any
     await db.commit()
     await db.refresh(task)
     return task

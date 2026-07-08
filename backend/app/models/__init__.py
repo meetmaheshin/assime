@@ -1,4 +1,5 @@
 """Import all models here so Alembic's autogenerate and Base.metadata see them."""
+from app.models.connection import Connection
 from app.models.conversation import ConversationTurn
 from app.models.memory import Memory
 from app.models.notification import Notification
@@ -18,4 +19,5 @@ __all__ = [
     "Notification",
     "UserProfile",
     "PushSubscription",
+    "Connection",
 ]

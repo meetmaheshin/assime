@@ -48,6 +48,10 @@ class TaskOut(BaseModel):
     ai_notes: str | None
     created_at: datetime
     updated_at: datetime
+    # Delegation (populated in routes when relevant)
+    assigned_by_id: uuid.UUID | None = None
+    assignment_status: str = "none"
+    assigned_by_name: str | None = None  # set by the route (delegator's name)
 
 
 class DuplicateMatch(BaseModel):

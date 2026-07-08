@@ -82,6 +82,19 @@ class Task(Base, UUIDMixin, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
 
+    # Delegation: who assigned this task to the owner (user_id is the assignee).
+    # NULL = normal self-created task. assignment_status: none|active|returned.
+    assigned_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"),
+        index=True, nullable=True,
+    )
+    assignment_status: Mapped[str] = mapped_column(
+        String(16), default="none", nullable=False
+    )
+    assigned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
     ai_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
