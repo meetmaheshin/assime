@@ -48,7 +48,7 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         # Bump `version` on meaningful changes so we can confirm what's deployed.
         return {
-            "status": "ok", "env": settings.env, "version": "build-48",
+            "status": "ok", "env": settings.env, "version": "build-49",
             "llm_provider": settings.resolved_provider,
             "reasoning_model": settings.azure_deployment_reasoning,
             "api_mode": "v1" if settings.azure_v1_base else "classic",
@@ -58,9 +58,13 @@ def create_app() -> FastAPI:
     async def health_llm() -> dict:
         from app.services.agent import TOOLS
         from app.services.llm import build_chat_client, chat_create
-        info = {"model": settings.azure_deployment_reasoning}
+        info = {"model": settings.azure_deployment_reasoning,
+                "v1_base": settings.azure_v1_base,
+                "endpoint": settings.azure_openai_endpoint,
+                "base_url_env": settings.azure_openai_base_url}
         try:
             client, model = build_chat_client()
+            info["client_base_url"] = str(getattr(client, "base_url", ""))
             resp = await chat_create(
                 client, model,
                 messages=[{"role": "user", "content": "remind me to call bank at 4pm"}],
