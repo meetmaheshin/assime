@@ -79,10 +79,18 @@ class Settings(BaseSettings):
         candidates = [self.azure_openai_base_url, self.azure_openai_endpoint]
         for raw in candidates:
             ep = (raw or "").rstrip("/")
+            if not ep:
+                continue
+            # Users often paste the Foundry '…/openai/v1/responses' sample URL, or a
+            # '…/chat/completions' one. The OpenAI-compatible base is '…/openai/v1'
+            # (the SDK appends the surface itself), so strip those suffixes.
+            for suffix in ("/responses", "/chat/completions", "/embeddings"):
+                if ep.endswith(suffix):
+                    ep = ep[: -len(suffix)].rstrip("/")
             if ep.endswith("/openai/v1"):
                 return ep
             if "services.ai.azure.com" in ep:
-                return ep + "/openai/v1" if "/openai/v1" not in ep else ep
+                return ep if "/openai/v1" in ep else ep + "/openai/v1"
         return ""
 
     @property
