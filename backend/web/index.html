@@ -300,6 +300,20 @@
         </div>
       </section>
 
+      <!-- CONNECT -->
+      <section class="screen" id="screen-connect">
+        <div class="pad">
+          <div class="greeting" style="font-size:20px">Connect</div>
+          <div class="muted" style="font-size:13px;margin-bottom:16px">Connect with people, then delegate by chatting — “ask Priya to send the deck”.</div>
+          <div style="display:flex;gap:8px">
+            <input id="connEmail" placeholder="their email" style="flex:1" />
+            <button class="btn-sm" id="connBtn" style="width:auto;padding:9px 16px">Connect</button>
+          </div>
+          <div id="connStatus" class="muted" style="font-size:12px;min-height:14px"></div>
+          <div id="connList" style="margin-top:8px"></div>
+        </div>
+      </section>
+
       <!-- NOTIFICATIONS -->
       <section class="screen" id="screen-notif">
         <div class="pad">
@@ -355,15 +369,6 @@
             <button class="btn-primary" id="saveSettings">Save settings</button>
             <div id="setStatus" class="muted" style="font-size:13px;min-height:16px"></div>
             <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
-            <label class="slabel">People you can delegate to</label>
-            <div class="muted" style="font-size:13px;margin-top:-6px">Connect, then assign tasks by chatting — “ask Priya to send the deck”.</div>
-            <div style="display:flex;gap:8px">
-              <input id="connEmail" placeholder="their email" style="flex:1" />
-              <button class="btn-sm" id="connBtn" style="width:auto;padding:9px 16px">Connect</button>
-            </div>
-            <div id="connStatus" class="muted" style="font-size:12px;min-height:14px"></div>
-            <div id="connList"></div>
-            <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
             <label class="slabel">What AARTH knows about you</label>
             <div id="profileBox" class="muted" style="font-size:13px;line-height:1.5;white-space:pre-wrap;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:12px">Loading…</div>
             <button class="btn-sm" id="refreshProfileBtn" style="width:100%">↻ Refresh what it's learned</button>
@@ -413,6 +418,7 @@
     <nav class="bottomnav">
       <button class="nav active" data-tab="chat"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span>Chat</button>
       <button class="nav" data-tab="today"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>Tasks</button>
+      <button class="nav" data-tab="connect"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg></span>Connect</button>
     </nav>
 
     <!-- INCOMING CALL-STYLE REMINDER -->
@@ -521,6 +527,7 @@ function showTab(name){
   $("#homeMic").classList.remove("show");  // voice lives in the chat mic; no FAB on Tasks
   if(name!=="today") setCap("");
   if(name==="memory") $("#memQuery").focus();
+  if(name==="connect") loadConnections();
 }
 document.querySelectorAll(".nav").forEach(n=>n.onclick=()=>showTab(n.dataset.tab));
 
@@ -1117,7 +1124,6 @@ async function loadSettings(){
   $("#setStatus").textContent="";
   showNativeStatus();
   loadProfile();
-  loadConnections();
   try{ const hv=await api("/health"); $("#appVersion").textContent="Version: "+(hv.version||"?"); }catch(_){}
 }
 async function loadConnections(){
