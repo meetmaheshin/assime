@@ -106,12 +106,38 @@ def _azure_client() -> AsyncOpenAI:
     )
 
 
+# If a configured deployment vanishes from Azure (expired/deleted), fall back to a
+# known-good model so the app keeps working without a redeploy. Learned at runtime.
+FALLBACK_MODEL = "gpt-4o-mini"
+_dead_models: set[str] = set()
+
+
+def _deployment_missing(err: Exception) -> bool:
+    s = str(err)
+    return (getattr(err, "status_code", None) == 404
+            or "DeploymentNotFound" in s
+            or "Could not find an existing deployment" in s)
+
+
+async def chat_create(client: AsyncOpenAI, model: str, **kwargs):
+    """client.chat.completions.create with automatic fallback if the deployment
+    is gone (404 DeploymentNotFound)."""
+    use = FALLBACK_MODEL if model in _dead_models else model
+    try:
+        return await client.chat.completions.create(model=use, **kwargs)
+    except Exception as err:  # noqa: BLE001
+        if use != FALLBACK_MODEL and _deployment_missing(err):
+            _dead_models.add(model)
+            return await client.chat.completions.create(model=FALLBACK_MODEL, **kwargs)
+        raise
+
+
 def _openai_completer(client: AsyncOpenAI, reasoning_model: str, cheap_model: str) -> CompleteFn:
     async def _complete(system: str, user: str, *, reasoning: bool = True) -> str:
         model = reasoning_model if reasoning else cheap_model
         # No temperature: gpt-5 reasoning models only accept the default (1).
-        resp = await client.chat.completions.create(
-            model=model,
+        resp = await chat_create(
+            client, model,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},

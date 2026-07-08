@@ -22,7 +22,7 @@ from app.models.user import User
 from app.services import (
     connections_service, delegation_service, memory_service, profile_service,
 )
-from app.services.llm import build_chat_client, llm
+from app.services.llm import build_chat_client, chat_create, llm
 
 TOOLS = [
     {"type": "function", "function": {
@@ -362,9 +362,8 @@ async def run(
     messages.append({"role": "user", "content": message})
 
     for _ in range(4):  # allow a few tool round-trips
-        resp = await client.chat.completions.create(
-            model=model, messages=messages, tools=TOOLS,
-            tool_choice="auto")
+        resp = await chat_create(
+            client, model, messages=messages, tools=TOOLS, tool_choice="auto")
         msg = resp.choices[0].message
         if not msg.tool_calls:
             return {"reply": (msg.content or "").strip(), "actions": actions}
@@ -390,6 +389,5 @@ async def run(
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
 
     # Ran out of tool rounds — ask the model to wrap up in plain text.
-    resp = await client.chat.completions.create(
-        model=model, messages=messages)
+    resp = await chat_create(client, model, messages=messages)
     return {"reply": (resp.choices[0].message.content or "").strip(), "actions": actions}
