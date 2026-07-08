@@ -1185,8 +1185,13 @@ $("#connBtn").onclick=async()=>{
 /* Your handle */
 $("#saveHandleBtn").onclick=async()=>{
   const el=$("#handleStatus"); el.textContent="Saving…";
-  try{ const me=await api("/auth/me/settings",{method:"PATCH",body:{handle:$("#myHandle").value.trim()}}); _meCache=me; el.textContent=me.handle?("You're findable as @"+me.handle):"Handle cleared."; }
-  catch(e){ el.textContent = e.message||"Couldn't save handle."; }
+  try{
+    const me=await api("/auth/me/settings",{method:"PATCH",body:{handle:$("#myHandle").value.trim()}});
+    _meCache=me;
+    $("#myHandle").value = me.handle || "";                 // reflect the normalized, saved value
+    el.textContent = me.handle ? ("✓ Saved — people can find you as @"+me.handle) : "Handle cleared.";
+  }
+  catch(e){ el.textContent = "⚠ "+(e.message||"Couldn't save handle."); }
 };
 /* Handle search (opt-in users only) */
 let _searchTimer=null;
