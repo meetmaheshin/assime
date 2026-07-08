@@ -48,7 +48,9 @@ async def my_invite(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     code = await connections_service.get_invite_code(db, user)
-    base = str(request.base_url).rstrip("/")
+    # Railway terminates TLS at its proxy, so base_url is http — force https for a
+    # shareable link.
+    base = str(request.base_url).rstrip("/").replace("http://", "https://")
     return {"code": code, "url": f"{base}/ui/?invite={code}"}
 
 
