@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0d1117" />
+<title>AARTH — your AI personal assistant that actually follows up</title>
+<meta name="description" content="AARTH is an AI personal assistant that captures your tasks by voice or text, schedules them, and chases you until they're done. English & Hindi. Android." />
+<meta property="og:title" content="AARTH — the assistant that won't let things slip" />
+<meta property="og:description" content="Talk to it. It remembers, schedules, and follows up until things are actually done." />
+<meta property="og:image" content="/ui/icon-512.png" />
+<link rel="icon" href="/ui/icon-192.png" />
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0d1117; --surface:#161b22; --surface2:#1c2330; --line:#2a3441;
+    --text:#e6edf3; --muted:#8b95a5; --accent:#ff8a00; --accent2:#ff5722;
+    --good:#3fb950;
+  }
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.6; overflow-x:hidden;
+  }
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 22px}
+  .grad{background:linear-gradient(120deg,var(--accent),var(--accent2))}
+  .grad-text{background:linear-gradient(120deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+  /* ambient glow */
+  .glow{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+  .glow::before,.glow::after{content:"";position:absolute;border-radius:50%;filter:blur(120px);opacity:.35}
+  .glow::before{width:520px;height:520px;background:var(--accent);top:-160px;right:-120px}
+  .glow::after{width:460px;height:460px;background:var(--accent2);bottom:-200px;left:-140px;opacity:.25}
+
+  /* nav */
+  nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);background:rgba(13,17,23,.72);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:800;font-size:20px;letter-spacing:.5px}
+  .brand img{width:34px;height:34px;border-radius:9px}
+  .navlinks{display:flex;align-items:center;gap:26px}
+  .navlinks a{color:var(--muted);font-size:15px;font-weight:500;transition:color .2s}
+  .navlinks a:hover{color:var(--text)}
+  .btn{display:inline-flex;align-items:center;gap:9px;font-weight:700;border-radius:12px;padding:12px 22px;font-size:15px;cursor:pointer;border:none;transition:transform .15s ease,box-shadow .2s ease}
+  .btn:hover{transform:translateY(-2px)}
+  .btn-primary{color:#1a0e00;background:linear-gradient(120deg,var(--accent),var(--accent2));box-shadow:0 8px 26px rgba(255,120,0,.35)}
+  .btn-ghost{color:var(--text);background:var(--surface2);border:1px solid var(--line)}
+  .btn-sm{padding:9px 16px;font-size:14px}
+  @media(max-width:720px){.navlinks .hidesm{display:none}}
+
+  /* hero */
+  header{position:relative;z-index:1;padding:70px 0 40px}
+  .hero{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center}
+  .badge{display:inline-flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--line);color:var(--muted);font-size:13px;font-weight:600;padding:7px 14px;border-radius:999px;margin-bottom:22px}
+  .badge .dot{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 10px var(--good)}
+  h1{font-size:52px;line-height:1.08;font-weight:850;letter-spacing:-1px;margin-bottom:20px}
+  .sub{font-size:19px;color:var(--muted);max-width:520px;margin-bottom:30px}
+  .cta{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .fineprint{color:var(--muted);font-size:13px;margin-top:16px;display:flex;gap:14px;flex-wrap:wrap}
+  .fineprint span{display:inline-flex;align-items:center;gap:6px}
+  @media(max-width:860px){.hero{grid-template-columns:1fr;text-align:center}.sub{margin-left:auto;margin-right:auto}.cta{justify-content:center}.fineprint{justify-content:center}h1{font-size:40px}}
+
+  /* phone mock */
+  .phone-wrap{display:flex;justify-content:center;perspective:1400px}
+  .phone{width:290px;height:590px;background:#05070b;border-radius:38px;padding:12px;box-shadow:0 40px 90px rgba(0,0,0,.6),0 0 0 2px #222c;transform:rotateY(-14deg) rotateX(4deg);position:relative}
+  .phone .notch{position:absolute;top:20px;left:50%;transform:translateX(-50%);width:110px;height:22px;background:#05070b;border-radius:0 0 14px 14px;z-index:5}
+  .screen{width:100%;height:100%;background:var(--bg);border-radius:28px;overflow:hidden;display:flex;flex-direction:column}
+  .scr-top{padding:26px 16px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .scr-top img{width:26px;height:26px;border-radius:7px}
+  .scr-top b{font-size:15px}
+  .scr-top small{color:var(--good);font-size:11px;display:block;line-height:1}
+  .chat{flex:1;padding:16px 14px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+  .bub{max-width:82%;padding:10px 13px;border-radius:15px;font-size:13.5px;line-height:1.45;animation:rise .6s both}
+  .bub.me{align-self:flex-end;background:linear-gradient(120deg,var(--accent),var(--accent2));color:#1a0e00;border-bottom-right-radius:5px;font-weight:600}
+  .bub.ai{align-self:flex-start;background:var(--surface2);border:1px solid var(--line);border-bottom-left-radius:5px}
+  .bub.n1{animation-delay:.2s}.bub.n2{animation-delay:.7s}.bub.n3{animation-delay:1.2s}.bub.n4{animation-delay:1.7s}
+  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  .scr-bar{padding:12px 14px 18px;border-top:1px solid var(--line);display:flex;gap:9px;align-items:center}
+  .scr-bar .inp{flex:1;background:var(--surface2);border:1px solid var(--line);border-radius:999px;height:38px;display:flex;align-items:center;padding:0 15px;color:var(--muted);font-size:13px}
+  .scr-bar .mic{width:38px;height:38px;border-radius:50%;background:linear-gradient(120deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:16px}
+  @media(max-width:860px){.phone{transform:none;margin-top:20px}}
+
+  /* sections */
+  section.block{position:relative;z-index:1;padding:70px 0}
+  .eyebrow{color:var(--accent);font-weight:700;letter-spacing:1.5px;font-size:13px;text-transform:uppercase;text-align:center;margin-bottom:12px}
+  h2{font-size:38px;font-weight:800;text-align:center;letter-spacing:-.5px;margin-bottom:14px}
+  .lead{color:var(--muted);font-size:17px;text-align:center;max-width:600px;margin:0 auto 48px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}h2{font-size:30px}}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:26px;transition:transform .2s,border-color .2s}
+  .card:hover{transform:translateY(-4px);border-color:var(--accent)}
+  .card .ic{width:48px;height:48px;border-radius:13px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:16px}
+  .card h3{font-size:19px;margin-bottom:8px}
+  .card p{color:var(--muted);font-size:15px}
+
+  /* steps */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;counter-reset:s}
+  @media(max-width:860px){.steps{grid-template-columns:1fr}}
+  .step{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:30px 26px 26px}
+  .step::before{counter-increment:s;content:counter(s);position:absolute;top:-18px;left:26px;width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:#1a0e00;background:linear-gradient(120deg,var(--accent),var(--accent2))}
+  .step h3{margin:14px 0 8px;font-size:19px}
+  .step p{color:var(--muted);font-size:15px}
+
+  /* download band */
+  .band{position:relative;z-index:1;margin:40px 0 80px}
+  .band .inner{background:linear-gradient(120deg,rgba(255,138,0,.14),rgba(255,87,34,.10));border:1px solid var(--line);border-radius:26px;padding:56px 34px;text-align:center;position:relative;overflow:hidden}
+  .band h2{margin-bottom:10px}
+  .band p{color:var(--muted);font-size:17px;margin-bottom:28px}
+
+  footer{border-top:1px solid var(--line);position:relative;z-index:1}
+  footer .wrap{padding:30px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;color:var(--muted);font-size:14px}
+  footer a{color:var(--muted)}footer a:hover{color:var(--text)}
+</style>
+</head>
+<body>
+<div class="glow"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="/ui/icon-192.png" alt="AARTH" />AARTH</a>
+    <div class="navlinks">
+      <a href="#features" class="hidesm">Features</a>
+      <a href="#how" class="hidesm">How it works</a>
+      <a href="/ui/" class="hidesm">Web app</a>
+      <a id="navGet" class="btn btn-primary btn-sm" href="#download">Get the app</a>
+    </div>
+  </div>
+</nav>
+
+<header id="top">
+  <div class="wrap hero">
+    <div>
+      <div class="badge"><span class="dot"></span>Now on Android · English &amp; हिंदी</div>
+      <h1>The assistant that <span class="grad-text">won't let things slip.</span></h1>
+      <p class="sub">Just talk to AARTH — “remind me to call the bank at 4, and get the deck to Priya by Friday.” It captures it, schedules it, and actually <b style="color:var(--text)">follows up</b> until it's done.</p>
+      <div class="cta">
+        <a id="dlHero" class="btn btn-primary" href="#download">⬇ Download for Android</a>
+        <a class="btn btn-ghost" href="/ui/">Try the web app →</a>
+      </div>
+      <div class="fineprint">
+        <span>📱 Android · ~9 MB</span>
+        <span>🎙️ Voice in Hindi &amp; English</span>
+        <span>🔔 Reminders that ring</span>
+      </div>
+    </div>
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="scr-top"><img src="/ui/icon-192.png" alt="" /><div><b>AARTH</b><small>● online</small></div></div>
+          <div class="chat">
+            <div class="bub me n1">Remind me to call the bank at 4pm 🏦</div>
+            <div class="bub ai n2">Done ✅ I'll ping you at 4:00 — and nudge you if it slips.</div>
+            <div class="bub me n3">Get Priya to finalize the deck by Friday</div>
+            <div class="bub ai n4">Assigned to Priya 🤝 due Fri. I'll track it and tell you the moment she's done.</div>
+          </div>
+          <div class="scr-bar"><div class="inp">Message AARTH…</div><div class="mic">🎙️</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="block" id="features">
+  <div class="wrap">
+    <div class="eyebrow">Why AARTH</div>
+    <h2>A real PA, not a to-do list.</h2>
+    <p class="lead">To-do apps wait for you. AARTH works like a sharp human assistant — it remembers why things matter and keeps you honest.</p>
+    <div class="grid">
+      <div class="card"><div class="ic">🎙️</div><h3>Talk, don't type</h3><p>Speak naturally in Hindi or English. AARTH turns “book the venue tomorrow morning” into a scheduled, tracked task.</p></div>
+      <div class="card"><div class="ic">🔔</div><h3>Follow-ups that land</h3><p>Timed reminders ring like a call — even with the app closed. Miss one and it checks in on everything still open.</p></div>
+      <div class="card"><div class="ic">🤝</div><h3>Delegate to anyone</h3><p>Hand a task to a connection — “ask Rahul to send the invoice.” You're notified the instant it's done.</p></div>
+      <div class="card"><div class="ic">🎯</div><h3>Knows your goals</h3><p>Tell it what you're working toward. It connects your daily tasks to the bigger picture and celebrates real wins.</p></div>
+      <div class="card"><div class="ic">🧠</div><h3>Learns you</h3><p>It builds a private profile from how you work — your patterns, what slips, when you're sharpest — and gets more useful over time.</p></div>
+      <div class="card"><div class="ic">🔒</div><h3>Yours, everywhere</h3><p>Everything lives in your account — it follows you across devices and survives a reinstall. Export or wipe it anytime.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="how">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2>Three steps to never dropping the ball.</h2>
+    <p class="lead">No setup, no forms. Open it and start talking.</p>
+    <div class="steps">
+      <div class="step"><h3>Tell it anything</h3><p>Type or speak what's on your mind. Tasks, meetings, calls, goals — AARTH sorts out what's what.</p></div>
+      <div class="step"><h3>It takes over</h3><p>Schedules it, flags clashes, delegates where needed, and sets the right reminders — all on its own.</p></div>
+      <div class="step"><h3>It follows up</h3><p>Morning briefing, mid-day check-ins, evening review. It pushes until things are actually done.</p></div>
+    </div>
+  </div>
+</section>
+
+<div class="band" id="download">
+  <div class="wrap">
+    <div class="inner">
+      <div class="glow" style="position:absolute"></div>
+      <div class="eyebrow">Get started free</div>
+      <h2>Bring AARTH home.</h2>
+      <p>Install on Android in under a minute. When you tap install, allow “install from unknown sources” — that's just Android's prompt for apps outside the Play Store.</p>
+      <div class="cta" style="justify-content:center">
+        <a id="dlMain" class="btn btn-primary" href="#" style="font-size:17px;padding:15px 30px">⬇ Download AARTH.apk</a>
+        <a class="btn btn-ghost" href="/ui/" style="font-size:17px;padding:15px 30px">Open web app</a>
+      </div>
+      <div class="fineprint" style="justify-content:center;margin-top:20px"><span>Android 8+ · ~9 MB · free</span></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="brand" style="font-size:17px"><img src="/ui/icon-192.png" style="width:26px;height:26px" alt="" />AARTH</div>
+    <div>© 2026 AARTH · <a href="/ui/">Web app</a> · <a id="dlFoot" href="#download">Download</a></div>
+  </div>
+</footer>
+
+<script>
+  // Single source of truth for the APK — GitHub Releases "latest" always resolves
+  // to the newest published build with an asset named AARTH.apk.
+  const APK_URL = "https://github.com/meetmaheshin/assime/releases/latest/download/AARTH.apk";
+  ["dlHero","dlMain","dlFoot","navGet"].forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    // Hero/Nav point at the #download band; Main/Foot download directly.
+    if(id==="dlMain"||id==="dlFoot"){ el.setAttribute("href",APK_URL); el.setAttribute("download",""); }
+  });
+</script>
+</body>
+</html>

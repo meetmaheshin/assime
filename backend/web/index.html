@@ -91,6 +91,24 @@
   .toast{position:absolute;left:50%;transform:translateX(-50%);bottom:96px;z-index:70;
     background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;
     font-size:13px;box-shadow:0 10px 26px rgba(0,0,0,.5);max-width:80%;text-align:center}
+  .updbanner{position:absolute;left:12px;right:12px;bottom:88px;z-index:120;display:flex;align-items:center;gap:12px;
+    background:var(--surface2);border:1px solid var(--accent);border-radius:16px;padding:12px 14px;
+    box-shadow:0 16px 40px rgba(0,0,0,.55);animation:updrise .35s ease both}
+  @keyframes updrise{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+  .updbanner.hidden{display:none}
+  .updicon{font-size:22px}
+  .updbody{flex:1;min-width:0}
+  .updtitle{font-weight:700;font-size:15px}
+  .updtext{color:var(--muted);font-size:12.5px;line-height:1.35}
+  .updbtn{background:linear-gradient(120deg,var(--accent),var(--accent2));color:#1a0e00;border:none;
+    border-radius:11px;padding:9px 16px;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap}
+  .updx{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:4px}
+  .updforce{position:absolute;inset:0;z-index:320;background:rgba(6,8,12,.94);display:flex;align-items:center;justify-content:center;padding:24px}
+  .updforce.hidden{display:none}
+  .updforce-card{background:var(--surface2);border:1px solid var(--line);border-radius:20px;padding:28px 24px;
+    max-width:340px;width:100%;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px}
+  .updforce-title{font-size:22px;font-weight:800}
+  .updforce-text{color:var(--muted);font-size:14px;line-height:1.5;margin-bottom:6px}
   .tour{position:absolute;inset:0;z-index:200}
   .tour.hidden{display:none}
   .tourhole{position:absolute;border-radius:14px;border:2px solid var(--accent);
@@ -421,6 +439,25 @@
 
     <div id="toast" class="toast hidden"></div>
 
+    <!-- App-update prompt (native only): appears when a newer APK is published -->
+    <div id="updateBanner" class="updbanner hidden">
+      <div class="updicon">⬆️</div>
+      <div class="updbody">
+        <div class="updtitle">Update available</div>
+        <div class="updtext" id="updText">A newer version of AARTH is ready.</div>
+      </div>
+      <button id="updGet" class="updbtn">Update</button>
+      <button id="updClose" class="updx" aria-label="Later">✕</button>
+    </div>
+    <div id="updateForce" class="updforce hidden">
+      <div class="updforce-card">
+        <img src="/ui/icon-192.png" alt="AARTH" style="width:56px;height:56px;border-radius:14px" />
+        <div class="updforce-title">Time to update</div>
+        <div class="updforce-text" id="updForceText">A new version is required to keep going.</div>
+        <button id="updForceGet" class="btn-primary" style="width:100%">⬇ Download update</button>
+      </div>
+    </div>
+
     <!-- First-open language choice -->
     <div id="langOverlay" class="langoverlay hidden">
       <div class="langcard">
@@ -590,6 +627,7 @@ async function enterApp(){
   notifTimer=setInterval(()=>{ loadNotifications(); updateConnectBadge(); }, 30000);  // proactive polling
   initWidgetLinks();  // home-screen widget deep links
   initPush();         // FCM push so closed-app events (assign/complete/…) reach the phone
+  checkForUpdate();   // offer a fresh APK if a newer native build is published
   acceptPendingInvite();  // ?invite=CODE from a shared connect link
   const me=await getMe();
   if(me && !me.language){ $("#langOverlay").classList.remove("hidden"); }  // first-open language choice
@@ -636,6 +674,40 @@ async function initPush(){
     }
     await PN.register();
   }catch(e){ console.warn("initPush", e); }
+}
+/* App-update check. The app runs off the live server, so web/JS changes ship
+   instantly — this only matters for NATIVE changes (new plugins, permissions).
+   Compares the installed versionCode against version.json and, if newer, offers
+   a one-tap download of the fresh APK. No-op in a plain browser. */
+function openExternal(url){
+  try{ window.open(url, "_system"); return; }catch(_){}
+  try{ const a=document.createElement("a"); a.href=url; a.target="_blank"; a.rel="noopener"; a.click(); }
+  catch(_){ location.href=url; }
+}
+async function checkForUpdate(){
+  if(!isNative()) return;                       // web app updates itself
+  const App = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+  if(!App || !App.getInfo) return;
+  let current = 0;
+  try{ const info = await App.getInfo(); current = parseInt(info.build||"0",10) || 0; }catch(_){ return; }
+  let m; try{
+    const r = await fetch("version.json?ts="+Date.now(), {cache:"no-store"});
+    m = await r.json();
+  }catch(_){ return; }
+  if(!m || !m.latestVersionCode || m.latestVersionCode <= current) return;  // up to date
+  const url = m.apkUrl;
+  if(m.mandatory){
+    $("#updForceText").textContent = m.notes || "A new version is required to keep going.";
+    $("#updateForce").classList.remove("hidden");
+    $("#updForceGet").onclick = ()=>openExternal(url);
+    return;
+  }
+  // Non-mandatory: respect a per-version dismissal so we don't nag every launch.
+  if(localStorage.getItem("aath_skip_ver") === String(m.latestVersionCode)) return;
+  $("#updText").textContent = m.notes || ("Version "+(m.latestVersionName||"")+" is ready — grab the newest build.");
+  const b = $("#updateBanner"); b.classList.remove("hidden");
+  $("#updGet").onclick = ()=>openExternal(url);
+  $("#updClose").onclick = ()=>{ b.classList.add("hidden"); localStorage.setItem("aath_skip_ver", String(m.latestVersionCode)); };
 }
 function initWidgetLinks(){
   const App = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;

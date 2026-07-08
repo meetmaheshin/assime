@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
@@ -48,7 +48,7 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         # Bump `version` on meaningful changes so we can confirm what's deployed.
         return {
-            "status": "ok", "env": settings.env, "version": "build-56",
+            "status": "ok", "env": settings.env, "version": "build-57",
             "llm_provider": settings.resolved_provider,
             "reasoning_model": settings.azure_deployment_reasoning,
             "api_mode": "v1" if settings.azure_v1_base else "classic",
@@ -66,10 +66,15 @@ def create_app() -> FastAPI:
     app.include_router(delegation.router)
     app.include_router(goals.router)
 
-    # Serve the web demo client from the same origin (no CORS needed).
+    # Serve the web client (/ui) and the public landing page (/) from one origin.
     if WEB_DIR.is_dir():
+        landing = WEB_DIR / "landing.html"
+
         @app.get("/", include_in_schema=False)
-        async def root() -> RedirectResponse:
+        async def root():
+            # Marketing/download page for browsers; the app itself lives at /ui/.
+            if landing.is_file():
+                return FileResponse(str(landing))
             return RedirectResponse(url="/ui/")
 
         app.mount("/ui", StaticFiles(directory=str(WEB_DIR), html=True), name="ui")
