@@ -27,6 +27,19 @@
             </intent-filter>
         </activity>
 
+        <!-- Full-screen "incoming call" reminder screen (shows over the lock screen) -->
+        <activity
+            android:name=".CallActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+
+        <!-- Fires the call at the scheduled time (from CallPlugin's AlarmManager) -->
+        <receiver android:name=".CallReceiver" android:exported="false" />
+
         <!-- Home-screen widget (quick add / speak) -->
         <receiver android:name=".AarthWidget" android:exported="false">
             <intent-filter>
@@ -52,4 +65,13 @@
          USE_EXACT_ALARM (API 33+) is auto-granted; SCHEDULE_EXACT_ALARM covers API 31-32. -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Voice capture in the WebView (getUserMedia). Without this the mic doesn't
+         even appear in the app's permission list. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Full-screen "incoming call" reminders (ring over the lock screen). -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
 </manifest>

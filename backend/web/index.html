@@ -683,16 +683,32 @@ async function syncNativeReminders(tasks){
       if(fu>now)
         out.push({id:base+1000000000, title:"AARTH", body: hi?`“${t.title}” हो गया? अपनी लिस्ट देखने के लिए टैप करें।`:`“${t.title}” done? Tap to check in on your list.`, channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(fu), allowWhileIdle:true}});
     });
-    // Daily morning brief + evening review — repeat at the user's set hours so they
-    // fire even with the app fully closed (fully native, no web push).
+    // Daily morning brief + evening review at the user's set hours. If the native
+    // full-screen CallReminder plugin is present, ring them like an incoming call;
+    // otherwise fall back to a normal (Level A) notification.
     if(me){
       const hh=(h,d)=>(typeof h==="number"?h:d);
-      out.push({id:2000000001, title: hi?"सुप्रभात ☀️":"Good morning ☀️", body: hi?"आज का दिन देखने के लिए टैप करें।":"Here's your day — tap to see what's on and get started.", channelId:NCHAN, sound:NSOUND, schedule:{on:{hour:hh(me.morning_hour,8), minute:0}, allowWhileIdle:true}});
-      out.push({id:2000000002, title: hi?"शाम की समीक्षा":"Evening review", body: hi?"आज कैसा रहा? क्या बाकी है देखने के लिए टैप करें।":"How did today go? Tap to check in on what's still pending.", channelId:NCHAN, sound:NSOUND, schedule:{on:{hour:hh(me.evening_hour,20), minute:0}, allowWhileIdle:true}});
+      const mTitle= hi?"सुप्रभात ☀️":"Good morning ☀️", eTitle= hi?"शाम की समीक्षा":"Evening review";
+      const mBody= hi?"आज का दिन देखने के लिए टैप करें।":"Here's your day — tap to see what's on and get started.";
+      const eBody= hi?"आज कैसा रहा? क्या बाकी है देखने के लिए टैप करें।":"How did today go? Tap to check in on what's still pending.";
+      const Call=getCall();
+      if(Call){
+        const DAY=86400000;
+        try{
+          await Call.cancel({id:2000000001}); await Call.cancel({id:2000000002});
+          await Call.schedule({id:2000000001, at:_nextAt(hh(me.morning_hour,8)), title:mTitle, body:mBody, repeatMillis:DAY});
+          await Call.schedule({id:2000000002, at:_nextAt(hh(me.evening_hour,20)), title:eTitle, body:eBody, repeatMillis:DAY});
+        }catch(_){}
+      } else {
+        out.push({id:2000000001, title:mTitle, body:mBody, channelId:NCHAN, sound:NSOUND, schedule:{on:{hour:hh(me.morning_hour,8), minute:0}, allowWhileIdle:true}});
+        out.push({id:2000000002, title:eTitle, body:eBody, channelId:NCHAN, sound:NSOUND, schedule:{on:{hour:hh(me.evening_hour,20), minute:0}, allowWhileIdle:true}});
+      }
     }
     if(out.length) await LN.schedule({notifications:out});
   }catch(e){ console.warn("native reminders failed", e); }
 }
+function getCall(){ return window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CallReminder; }
+function _nextAt(hour){ const d=new Date(); d.setHours(hour,0,0,0); if(d.getTime()<=Date.now()) d.setDate(d.getDate()+1); return d.getTime(); }
 async function showNativeStatus(){
   const el=$("#nativeStatus"); if(!el) return;
   const LN=getLN();
@@ -701,13 +717,22 @@ async function showNativeStatus(){
   catch(e){ el.textContent="Native app ✓ · permission check failed"; }
 }
 $("#testNativeBtn").onclick=async()=>{
-  const el=$("#nativeStatus"); const LN=getLN();
-  if(!LN){ el.textContent="Not in the AARTH app — open the installed app to test phone alarms."; toast("Open the installed app to test."); return; }
+  const el=$("#nativeStatus"); const LN=getLN(); const Call=getCall();
+  if(!LN){ el.textContent="Not in the AARTH app — open the installed app to test."; toast("Open the installed app to test."); return; }
   if(!(await ensureNativePerm())){ el.textContent="Notification permission denied — enable it in phone settings."; return; }
   try{
-    await LN.schedule({notifications:[{id: 999001, title:"AARTH test", body:"This is a test alarm — fired ✓", channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(Date.now()+10000), allowWhileIdle:true}}]});
-    el.textContent="Scheduled ✓ — close the app now; it should buzz in ~10 seconds.";
-    toast("Test alarm in 10s — you can close the app.");
+    if(Call){
+      let fs=true; try{ fs=(await Call.canUseFullScreen()).granted; }catch(_){}
+      await Call.schedule({id:999002, at:Date.now()+10000, title:"AARTH is calling", body:"Test call — lock your phone to see the full-screen ring.", repeatMillis:0});
+      el.textContent = fs
+        ? "Test call in ~10s ✓ — lock the phone; it should ring full-screen."
+        : "Scheduled ✓, but full-screen isn't allowed yet — enable it in Settings › Apps › AARTH › Appear on top / Full-screen notifications.";
+      toast("Test call in 10s — lock your phone.");
+    } else {
+      await LN.schedule({notifications:[{id: 999001, title:"AARTH test", body:"This is a test alarm — fired ✓", channelId:NCHAN, sound:NSOUND, schedule:{at:new Date(Date.now()+10000), allowWhileIdle:true}}]});
+      el.textContent="Scheduled ✓ — close the app; it should ring in ~10 seconds.";
+      toast("Test in 10s — you can close the app.");
+    }
   }catch(e){ el.textContent="Schedule failed: "+(e.message||e); }
 };
 function fmtWhen(iso){
