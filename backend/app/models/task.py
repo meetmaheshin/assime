@@ -103,7 +103,10 @@ class Task(Base, UUIDMixin, TimestampMixin):
         UUID(as_uuid=True), nullable=True
     )
 
-    user: Mapped[User] = relationship(back_populates="tasks")
+    # `tasks` now has two FKs to users (user_id owner + assigned_by_id delegator),
+    # so pin this relationship to user_id to keep it unambiguous.
+    user: Mapped[User] = relationship(
+        back_populates="tasks", foreign_keys=[user_id])
     project: Mapped[Project | None] = relationship(back_populates="tasks")
     history: Mapped[list[TaskHistory]] = relationship(
         back_populates="task", cascade="all, delete-orphan"
