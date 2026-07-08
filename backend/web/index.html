@@ -393,6 +393,20 @@
             <div id="profileBox" class="muted" style="font-size:13px;line-height:1.5;white-space:pre-wrap;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:12px">Loading…</div>
             <button class="btn-sm" id="refreshProfileBtn" style="width:100%">↻ Refresh what it's learned</button>
             <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
+            <label class="slabel">Train your AI about yourself</label>
+            <div class="muted" style="font-size:13px;margin-top:-6px">Tell AARTH anything it should always keep in mind — your work, routine, what you're juggling, how you like to be pushed.</div>
+            <textarea id="aboutBox" rows="4" placeholder="e.g. I run a small design studio. Mornings are for deep work, meetings after 2pm. Push me hard on the gym — I skip it." style="width:100%;resize:vertical;font:inherit;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface2);color:var(--text)"></textarea>
+            <button class="btn-primary" id="saveAboutBtn" style="width:100%">Save about me</button>
+            <div id="aboutStatus" class="muted" style="font-size:12px;min-height:14px"></div>
+            <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
+            <label class="slabel">Your goals 🎯</label>
+            <div class="muted" style="font-size:13px;margin-top:-6px">The bigger things you're working toward. AARTH connects your tasks to these.</div>
+            <div id="goalsList" style="display:flex;flex-direction:column;gap:6px"></div>
+            <div style="display:flex;gap:8px">
+              <input id="goalInput" placeholder="Add a goal…" style="flex:1;font:inherit;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface2);color:var(--text)" />
+              <button class="btn-sm" id="addGoalBtn" style="width:auto;padding:0 16px">Add</button>
+            </div>
+            <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
             <label class="slabel">Your data</label>
             <div class="muted" style="font-size:13px;margin-top:-6px">Stored safely in your account — it follows you across devices and survives a reinstall.</div>
             <button class="btn-sm" id="exportBtn" style="width:100%">Export my data</button>
@@ -1177,6 +1191,7 @@ async function loadSettings(){
   $("#setStatus").textContent="";
   showNativeStatus();
   loadProfile();
+  loadGoals();
   try{ const hv=await api("/health"); $("#appVersion").textContent="Version: "+(hv.version||"?"); }catch(_){}
 }
 function setConnectBadge(n){
@@ -1257,8 +1272,46 @@ async function loadProfile(){
   try{ const p=await api("/auth/me/profile");
     box.textContent = (p.summary && p.summary.trim()) ? p.summary
       : "Still getting to know you — chat and add a few tasks, then I'll build this.";
+    const ab=$("#aboutBox"); if(ab && document.activeElement!==ab) ab.value = p.about||"";
   }catch(_){ box.textContent="Couldn't load right now."; }
 }
+$("#saveAboutBtn").onclick=async()=>{
+  const st=$("#aboutStatus"); st.textContent="Saving…";
+  try{ await api("/auth/me/profile/about",{method:"PUT",body:{about:$("#aboutBox").value}});
+    st.textContent="Saved ✓ — AARTH will keep this in mind."; setTimeout(()=>{st.textContent="";},3000);
+  }catch(e){ st.textContent=e.message||"Couldn't save."; }
+};
+async function loadGoals(){
+  const list=$("#goalsList"); if(!list) return;
+  try{ const gs=await api("/goals");
+    if(!gs.length){ list.innerHTML='<div class="muted" style="font-size:13px">No goals yet — add what you\'re working toward.</div>'; return; }
+    list.innerHTML="";
+    gs.forEach(g=>{
+      const row=document.createElement("div");
+      row.style.cssText="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:10px 12px";
+      const done = g.status==="done";
+      row.innerHTML=`<span style="flex:1;font-size:14px;${done?'opacity:.5;text-decoration:line-through':''}">${h(g.title)}</span>`;
+      if(!done){
+        const dn=document.createElement("button"); dn.className="btn-sm"; dn.textContent="✓"; dn.title="Mark achieved";
+        dn.style.cssText="width:auto;padding:2px 10px"; dn.onclick=async()=>{ await api(`/goals/${g.id}/done`,{method:"POST"}); loadGoals(); };
+        row.appendChild(dn);
+      }
+      const del=document.createElement("button"); del.className="btn-sm"; del.textContent="✕"; del.title="Remove";
+      del.style.cssText="width:auto;padding:2px 10px;border-color:var(--danger);color:var(--danger)";
+      del.onclick=async()=>{ await api(`/goals/${g.id}`,{method:"DELETE"}); loadGoals(); };
+      row.appendChild(del);
+      list.appendChild(row);
+    });
+  }catch(_){ list.innerHTML='<div class="muted" style="font-size:13px">Couldn\'t load goals.</div>'; }
+}
+async function addGoal(){
+  const inp=$("#goalInput"); const t=inp.value.trim(); if(!t) return;
+  inp.value="";
+  try{ await api("/goals",{method:"POST",body:{title:t}}); loadGoals(); }
+  catch(e){ toast(e.message||"Couldn't add goal"); inp.value=t; }
+}
+$("#addGoalBtn").onclick=addGoal;
+$("#goalInput").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addGoal(); } });
 $("#refreshProfileBtn").onclick=async()=>{
   const box=$("#profileBox"); box.textContent="Thinking about what I've learned…";
   try{ const p=await api("/auth/me/profile/refresh",{method:"POST"});

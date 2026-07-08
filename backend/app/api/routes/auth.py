@@ -1,5 +1,6 @@
 """Register, login, and current-user/settings endpoints (multi-user)."""
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,9 +58,27 @@ async def my_profile(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """What AARTH has learned about you (transparency + trust)."""
+    """What AARTH knows about you — auto-learned summary + your own notes."""
     from app.services import profile_service
-    return {"summary": await profile_service.get_summary(db, user.id)}
+    return {
+        "summary": await profile_service.get_summary(db, user.id),
+        "about": await profile_service.get_about(db, user.id),
+    }
+
+
+class AboutIn(BaseModel):
+    about: str = ""
+
+
+@router.put("/me/profile/about")
+async def set_about(
+    payload: AboutIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """The user's own 'train your AI about yourself' notes."""
+    from app.services import profile_service
+    return {"about": await profile_service.set_about(db, user, payload.about)}
 
 
 @router.post("/me/profile/refresh")

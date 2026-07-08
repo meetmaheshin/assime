@@ -8,8 +8,8 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
-    auth, chat, connections, delegation, notifications, planning, projects,
-    push, tasks, voice,
+    auth, chat, connections, delegation, goals, notifications, planning,
+    projects, push, tasks, voice,
 )
 from app.core.config import settings
 from app.services.scheduler import start_scheduler, stop_scheduler
@@ -48,7 +48,7 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         # Bump `version` on meaningful changes so we can confirm what's deployed.
         return {
-            "status": "ok", "env": settings.env, "version": "build-55",
+            "status": "ok", "env": settings.env, "version": "build-56",
             "llm_provider": settings.resolved_provider,
             "reasoning_model": settings.azure_deployment_reasoning,
             "api_mode": "v1" if settings.azure_v1_base else "classic",
@@ -64,6 +64,7 @@ def create_app() -> FastAPI:
     app.include_router(push.router)
     app.include_router(connections.router)
     app.include_router(delegation.router)
+    app.include_router(goals.router)
 
     # Serve the web demo client from the same origin (no CORS needed).
     if WEB_DIR.is_dir():

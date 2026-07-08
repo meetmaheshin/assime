@@ -36,6 +36,18 @@ async def get_summary(db: AsyncSession, user_id) -> str:
     return (p.summary or "") if p else ""
 
 
+async def get_about(db: AsyncSession, user_id) -> str:
+    p = await db.scalar(select(UserProfile).where(UserProfile.user_id == user_id))
+    return (p.about or "") if p else ""
+
+
+async def set_about(db: AsyncSession, user, text: str | None) -> str:
+    p = await get_or_create(db, user.id)
+    p.about = (text or "").strip()[:4000] or None
+    await db.commit()
+    return p.about or ""
+
+
 def _local_hour(dt: datetime, tz: str) -> int:
     try:
         return dt.astimezone(ZoneInfo(tz)).hour

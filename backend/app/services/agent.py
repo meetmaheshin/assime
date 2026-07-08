@@ -20,7 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.task import Task, TaskHistory
 from app.models.user import User
 from app.services import (
-    connections_service, delegation_service, memory_service, profile_service,
+    connections_service, delegation_service, goals_service, memory_service,
+    profile_service,
 )
 from app.services.llm import build_chat_client, chat_create, llm
 
@@ -68,6 +69,15 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "email": {"type": "string"},
         }, "required": ["email"]}}},
+    {"type": "function", "function": {
+        "name": "set_goal",
+        "description": "Save a longer-term GOAL / north-star the user names — e.g. "
+        "'get fit', 'launch the app by Sept', 'read 12 books this year', 'save "
+        "₹1L'. Goals are bigger than tasks; use this when they talk about what "
+        "they're working toward (NOT a single dated to-do).",
+        "parameters": {"type": "object", "properties": {
+            "title": {"type": "string", "description": "the goal, short"},
+        }, "required": ["title"]}}},
     {"type": "function", "function": {
         "name": "remember_fact",
         "description": "Save a durable fact or preference the user reveals about "
@@ -245,6 +255,18 @@ async def _connect_person(db, user, now, args) -> str:
     return r.get("message", "Request sent.")
 
 
+async def _set_goal(db, user, now, args) -> str:
+    title = (args.get("title") or "").strip()
+    if not title:
+        return "What's the goal?"
+    existing = await goals_service.active_titles(db, user.id)
+    if any(title.lower() in t.lower() or t.lower() in title.lower()
+           for t in existing):
+        return f'"{title}" is already one of your goals.'
+    g = await goals_service.add(db, user.id, title)
+    return f'Locked in a new goal: "{g.title}". 🎯 I\'ll keep it in mind.'
+
+
 async def _remember_fact(db, user, now, args) -> str:
     fact = (args.get("fact") or "").strip()
     if not fact:
@@ -261,6 +283,7 @@ _EXECUTORS = {
     "assign_task": _assign_task,
     "list_delegated": _list_delegated,
     "connect_person": _connect_person,
+    "set_goal": _set_goal,
     "remember_fact": _remember_fact,
 }
 
@@ -298,6 +321,9 @@ async def run(
         f"P{t.priority} {t.title}" + (f" (at {_loc(t.deadline)})" if t.deadline else "")
         for t in tasks) or "none"
     profile = await profile_service.get_summary(db, user.id)
+    about = await profile_service.get_about(db, user.id)
+    goals = await goals_service.active_titles(db, user.id)
+    goal_lines = "; ".join(goals) if goals else ""
 
     system = (
         f"You are {user.assistant_name}, {user.display_name}'s executive assistant. "
@@ -348,6 +374,12 @@ async def run(
         "plainly and ask before adding another. If a time already passed today, use "
         "the next day. Older messages and the task list are context only — never "
         "re-create or re-complete something just because it appears earlier.\n"
+        "GOALS & MEANING: the user has bigger goals (below). When a new task ties to "
+        "a goal, name the connection briefly ('nice — that's straight at your "
+        "fitness goal 💪'). When they name a fresh ambition, call set_goal. Once in a "
+        "while — not every message — ask a light 'why' to understand what matters "
+        "('what's pushing this deadline?'), and genuinely celebrate wins when they "
+        "finish something that mattered (a quick 🙌, not a paragraph).\n"
         "STYLE: keep replies short (1-3 sentences) and warm — sprinkle in a fitting "
         "emoji or two (✅ 📅 🔔 🙌 etc.), but don't overdo it. When you need to ask "
         "for missing details or offer choices, present them as short bullet points "
@@ -357,6 +389,9 @@ async def run(
         "remember_fact. Use what you know about them to be more personal. Never "
         f"invent facts. Now: {now.isoformat()} (year {now.year}; never a past year).\n\n"
         + (f"What I know about {user.display_name}:\n{profile}\n\n" if profile else "")
+        + (f"In their own words (they wrote this about themselves — trust it):\n"
+           f"{about}\n\n" if about else "")
+        + (f"Their goals: {goal_lines}\n\n" if goal_lines else "")
         + f"Current state —\nTasks: {task_lines}\n\n"
         f"Relevant memory:\n{context}"
     )

@@ -2,6 +2,7 @@
 from app.models.connection import Connection
 from app.models.conversation import ConversationTurn
 from app.models.fcm_token import FcmToken
+from app.models.goal import Goal
 from app.models.memory import Memory
 from app.models.notification import Notification
 from app.models.profile import UserProfile
@@ -22,4 +23,5 @@ __all__ = [
     "PushSubscription",
     "Connection",
     "FcmToken",
+    "Goal",
 ]

@@ -29,6 +29,9 @@ class UserProfile(Base, UUIDMixin, TimestampMixin):
     )
     # Concise, LLM-maintained narrative the assistant reads before every reply.
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # User-authored: what THEY chose to tell AARTH about themselves (work, style,
+    # context). Kept separate from the auto-learned summary and always trusted.
+    about: Mapped[str | None] = mapped_column(Text, nullable=True)
     # When the summary was last regenerated (gate refreshes to ~once/day).
     refreshed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

@@ -18,7 +18,7 @@ import logging
 from app.models.notification import Notification
 from app.models.task import Task
 from app.models.user import User
-from app.services import profile_service
+from app.services import goals_service, profile_service
 from app.services.llm import llm
 
 DAILY_CAP = 6  # never spam
@@ -27,7 +27,9 @@ FOLLOWUP_GAP = timedelta(hours=1)  # wait this long after a timed task, then che
 
 
 async def _accountability_message(user: User, open_tasks, now: datetime, mode: str,
-                                  profile: str = "") -> str:
+                                  profile: str = "", about: str = "",
+                                  goals: list[str] | None = None,
+                                  done_today: int = 0) -> str:
     """LLM-written, human, ASSERTIVE check-in about ALL pending items — references
     why they matter and pushes the user to finish. Falls back to a firm template
     if the model is unavailable. `mode` = "followup" | "evening"."""
@@ -56,11 +58,19 @@ async def _accountability_message(user: User, open_tasks, now: datetime, mode: s
         "reasons given), and pushes them to finish. Be direct and a little firm — "
         "it's fine to call out something that's slipping. No bullet lists, no "
         "emojis, no corporate tone. Sound like a real person who genuinely wants "
-        "them to succeed and won't let them off the hook."
+        "them to succeed and won't let them off the hook. If they've completed "
+        "things today or made progress toward a goal, open by genuinely "
+        "acknowledging that win before pushing on the rest."
         + (" Write the message in natural Hindi/Hinglish."
            if user.language == "hi" else " Write in English.")
     )
     know = f"What you know about {user.display_name}:\n{profile}\n\n" if profile else ""
+    if about:
+        know += f"In their own words about themselves:\n{about}\n\n"
+    if goals:
+        know += f"Their bigger goals: {'; '.join(goals)}\n\n"
+    if done_today:
+        know += f"They already completed {done_today} task(s) today — acknowledge it.\n\n"
     prompt = (f"{when} {know}{user.display_name}'s still-open items:\n{tasklist}\n\n"
               "Write the check-in message now (plain text, no lists). Use what you "
               "know about them to make it personal and land harder.")
@@ -187,8 +197,14 @@ async def generate(
                 Notification.created_at >= now - timedelta(hours=3)))
             if not recent:
                 profile = await profile_service.get_summary(db, user.id)
+                about = await profile_service.get_about(db, user.id)
+                goals = await goals_service.active_titles(db, user.id)
+                done_today = await db.scalar(select(func.count(Task.id)).where(
+                    Task.user_id == user.id, Task.status == "completed",
+                    Task.completed_at >= day_start_utc)) or 0
                 msg = await _accountability_message(
-                    user, open_tasks, now, "followup", profile)
+                    user, open_tasks, now, "followup", profile, about, goals,
+                    done_today)
                 n = Notification(user_id=user.id, kind="followup",
                                  title="Checking in", body=msg, alert_level="call")
                 db.add(n)
@@ -209,10 +225,20 @@ async def generate(
         if (force or (user.evening_hour <= hour < 23)) and budget > 0 \
                 and not await _exists_today(
                     db, user.id, "evening_review", None, day_start_utc):
+            done_today = await db.scalar(select(func.count(Task.id)).where(
+                Task.user_id == user.id, Task.status == "completed",
+                Task.completed_at >= day_start_utc)) or 0
             if open_tasks:
                 profile = await profile_service.get_summary(db, user.id)
+                about = await profile_service.get_about(db, user.id)
+                goals = await goals_service.active_titles(db, user.id)
                 body = await _accountability_message(
-                    user, open_tasks, now, "evening", profile)
+                    user, open_tasks, now, "evening", profile, about, goals,
+                    done_today)
+            elif done_today:
+                body = (f"Day's done — and you cleared {done_today} thing"
+                        f"{'s' if done_today != 1 else ''} today. 🙌 Solid. Want to "
+                        "line anything up for tomorrow?")
             else:
                 body = ("Day's done and nothing's left open — solid work. Want to "
                         "line anything up for tomorrow?")
