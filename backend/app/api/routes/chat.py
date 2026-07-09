@@ -80,9 +80,15 @@ async def chat(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ChatResponse:
-    hits = await memory_service.search(
-        db, llm, user_id=user.id, query=payload.message, limit=8
-    )
+    # Memory retrieval is an enhancement — if embeddings are down, chat must still
+    # work (just without grounding context) rather than fail the whole request.
+    try:
+        hits = await memory_service.search(
+            db, llm, user_id=user.id, query=payload.message, limit=8
+        )
+    except Exception:
+        logging.exception("memory search failed; continuing without context")
+        hits = []
     # Drop memories whose task is already completed — a done task shouldn't linger
     # in "based on what you've told me" or be fed to the agent as live context.
     task_src = [m.source_id for m, _ in hits if m.source_type == "task" and m.source_id]

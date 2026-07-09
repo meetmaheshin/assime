@@ -90,6 +90,23 @@ TOOLS = [
 ]
 
 
+# Executors return a small structured result so the loop can tell — deterministically,
+# not by reading the model's prose — whether a real write persisted (`effect`) or the
+# action errored out (`ok=False`). This is what lets us guarantee the reply never
+# claims success for something that didn't actually happen.
+def _ok(msg: str, effect: str | None = None) -> dict:
+    return {"ok": True, "msg": msg, "effect": effect}
+
+
+def _info(msg: str) -> dict:
+    """Ran fine but did NOT write (guard/clash/duplicate/no-match)."""
+    return {"ok": True, "msg": msg, "effect": None}
+
+
+def _fail(msg: str) -> dict:
+    return {"ok": False, "msg": msg, "effect": None}
+
+
 def _parse_dt(s: str | None, now: datetime) -> datetime | None:
     if not s:
         return None
@@ -123,26 +140,32 @@ def _has_clock_time(dt: datetime | None) -> bool:
     return dt is not None and (dt.hour != 0 or dt.minute != 0)
 
 
-async def _create_task(db, user, now, args) -> str:
+async def _create_task(db, user, now, args) -> dict:
     title = (args.get("title") or "").strip()
     if not title:
-        return "No title given."
+        return _fail("No title given.")
     prio = args.get("priority")
     prio = prio if isinstance(prio, int) and 1 <= prio <= 4 else 3
     # Duplicate guard: with one continuous conversation, the model must NEVER
-    # silently re-create something already on the list (from an earlier message
-    # or a past day). Semantic match against existing open tasks.
+    # silently re-create something already on the list. This does a semantic
+    # (embedding) lookup — but a flaky embeddings endpoint must NEVER block a
+    # real task creation, so treat any failure here as "no duplicate found".
     if not args.get("force"):
-        probe = f"{title}. {args.get('reason') or ''}".strip()
-        dupes = await memory_service.find_duplicates(
-            db, llm, user_id=user.id, text=probe)
-        for mem, _sim in dupes:
-            existing = await db.get(Task, mem.source_id) if mem.source_id else None
-            if existing is not None and existing.status != "completed":
-                return (f'ALREADY EXISTS: "{existing.title}" is already on the list — '
+        try:
+            probe = f"{title}. {args.get('reason') or ''}".strip()
+            dupes = await memory_service.find_duplicates(
+                db, llm, user_id=user.id, text=probe)
+            for mem, _sim in dupes:
+                existing = await db.get(Task, mem.source_id) if mem.source_id else None
+                if existing is not None and existing.status != "completed":
+                    return _info(
+                        f'ALREADY EXISTS: "{existing.title}" is already on the list — '
                         "do NOT create a duplicate. Tell the user it's already there. "
                         "Only if they clearly want a separate second one, call "
                         "create_task again with force=true.")
+        except Exception:
+            logging.warning("duplicate check skipped (embedding unavailable)",
+                            exc_info=True)
     # `when` is the new name; accept `deadline`/`starts_at` for compatibility.
     when = _parse_dt(
         args.get("when") or args.get("deadline") or args.get("starts_at"), now)
@@ -160,37 +183,48 @@ async def _create_task(db, user, now, args) -> str:
             Task.deadline >= when - window,
             Task.deadline <= when + window).limit(1))
         if clash is not None:
-            return (f'CONFLICT: the user already has "{clash.title}" at '
-                    f"{_fmt_local(clash.deadline, user, '%H:%M')}. Tell them about "
-                    "this clash and ask if they still want both; only if they "
-                    "confirm, call create_task again with force=true.")
+            return _info(
+                f'CONFLICT: the user already has "{clash.title}" at '
+                f"{_fmt_local(clash.deadline, user, '%H:%M')}. Tell them about "
+                "this clash and ask if they still want both; only if they "
+                "confirm, call create_task again with force=true.")
+    # ── Durable write FIRST: commit the task before anything that can fail, so a
+    # later embedding hiccup can never lose it. This is the row the user sees. ──
     task = Task(user_id=user.id, title=title, reason=args.get("reason") or None,
                 priority=prio, importance="high" if prio == 1 else "medium",
                 deadline=when)
-    task.history.append(TaskHistory(event="created"))
     db.add(task)
     await db.flush()
-    mem = await memory_service.remember(
-        db, llm, user_id=user.id, kind="task",
-        content=f"{title}. {args.get('reason') or ''}".strip(),
-        source_type="task", source_id=task.id, commit=False)
-    task.embedding_id = mem.id
+    db.add(TaskHistory(task_id=task.id, event="created"))
     await db.commit()
+    # Best-effort semantic memory (for search/dedup) — the task is already saved,
+    # so if embedding fails we just log and move on.
+    try:
+        mem = await memory_service.remember(
+            db, llm, user_id=user.id, kind="task",
+            content=f"{title}. {args.get('reason') or ''}".strip(),
+            source_type="task", source_id=task.id, commit=False)
+        task.embedding_id = mem.id
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logging.warning("task embedding skipped (task already saved)", exc_info=True)
     if timed:
         note = " (that time today had passed, so I set the next day)" if rolled else ""
-        return f'Added "{title}" for {_fmt_local(when, user)}.{note}'
-    return f'Created task "{title}".'
+        return _ok(f'Added "{title}" for {_fmt_local(when, user)}.{note}', "created")
+    return _ok(f'Created task "{title}".', "created")
 
 
-async def _complete_task(db, user, now, args) -> str:
+async def _complete_task(db, user, now, args) -> dict:
     title = (args.get("title") or "").strip()
     if not title:
-        return "Which task?"
+        return _info("Which task?")
     row = await db.scalar(
         select(Task).where(Task.user_id == user.id, Task.status != "completed",
                            Task.title.ilike(f"%{title}%")).limit(1))
     if row is None:
-        return f'No open task matching "{title}".'
+        return _info(f'No open task matching "{title}" — nothing was changed. '
+                     "Tell the user you couldn't find it; do not claim it's done.")
     row.status = "completed"
     row.progress = 100
     row.completed_at = datetime.now(timezone.utc)
@@ -199,14 +233,14 @@ async def _complete_task(db, user, now, args) -> str:
     db.add(TaskHistory(task_id=row.id, event="completed"))
     delegation_service.notify_completed(db, row, user)  # ping the delegator if assigned
     await db.commit()
-    return f'Marked "{row.title}" done.'
+    return _ok(f'Marked "{row.title}" done.', "completed")
 
 
-async def _assign_task(db, user, now, args) -> str:
+async def _assign_task(db, user, now, args) -> dict:
     title = (args.get("title") or "").strip()
     to = (args.get("to") or "").strip()
     if not title or not to:
-        return "Need a task and who to assign it to."
+        return _info("Need a task and who to assign it to.")
     target = None
     if "@" in to:
         target = await connections_service.get_user_by_email(db, to)
@@ -216,65 +250,73 @@ async def _assign_task(db, user, now, args) -> str:
         if len(matches) == 1:
             target = matches[0]
         elif len(matches) > 1:
-            return ("Which one? You're connected with "
-                    + ", ".join(u.display_name for u in matches))
+            return _info("Which one? You're connected with "
+                         + ", ".join(u.display_name for u in matches))
     if target is None:
-        return (f"You're not connected with “{to}”. Send them a connection request "
-                "first (I can do it if you give their email), then I'll assign it.")
+        return _info(
+            f"NOT ASSIGNED: you're not connected with “{to}”, so nothing was sent. "
+            "Tell the user plainly it did NOT go through and offer to send a "
+            "connection request if they give the email. Do not claim it's assigned.")
     try:
         task = await delegation_service.assign(
             db, user, target, title=title, reason=args.get("reason"),
             deadline=_parse_dt(args.get("when"), now),
             priority=args.get("priority") or 3)
     except HTTPException as e:
-        return str(e.detail)
-    return f'Assigned “{task.title}” to {target.display_name}.'
+        return _info(f"NOT ASSIGNED: {e.detail} Tell the user it didn't go through.")
+    return _ok(f'Assigned “{task.title}” to {target.display_name}.', "assigned")
 
 
-async def _list_delegated(db, user, now, args) -> str:
+async def _list_delegated(db, user, now, args) -> dict:
     rows = list(await db.scalars(
         select(Task).where(Task.assigned_by_id == user.id,
                            Task.status != "completed")))
     if not rows:
-        return "You haven't delegated anything that's still open."
+        return _info("You haven't delegated anything that's still open.")
     ids = {t.user_id for t in rows}
     names = {u.id: u.display_name
              for u in await db.scalars(select(User).where(User.id.in_(ids)))}
-    return "You've delegated: " + "; ".join(
-        f'“{t.title}” → {names.get(t.user_id, "?")} ({t.status})' for t in rows)
+    return _info("You've delegated: " + "; ".join(
+        f'“{t.title}” → {names.get(t.user_id, "?")} ({t.status})' for t in rows))
 
 
-async def _connect_person(db, user, now, args) -> str:
+async def _connect_person(db, user, now, args) -> dict:
     email = (args.get("email") or "").strip()
     if "@" not in email:
-        return "I need their email address to send a connection request."
+        return _info("I need their email address to send a connection request.")
     try:
         r = await connections_service.request(db, user, email)
     except HTTPException as e:
-        return str(e.detail)
-    return r.get("message", "Request sent.")
+        return _info(str(e.detail))
+    return _ok(r.get("message", "Request sent."))
 
 
-async def _set_goal(db, user, now, args) -> str:
+async def _set_goal(db, user, now, args) -> dict:
     title = (args.get("title") or "").strip()
     if not title:
-        return "What's the goal?"
+        return _info("What's the goal?")
     existing = await goals_service.active_titles(db, user.id)
     if any(title.lower() in t.lower() or t.lower() in title.lower()
            for t in existing):
-        return f'"{title}" is already one of your goals.'
+        return _info(f'"{title}" is already one of your goals.')
     g = await goals_service.add(db, user.id, title)
-    return f'Locked in a new goal: "{g.title}". 🎯 I\'ll keep it in mind.'
+    return _ok(f'Locked in a new goal: "{g.title}". 🎯 I\'ll keep it in mind.', "goal")
 
 
-async def _remember_fact(db, user, now, args) -> str:
+async def _remember_fact(db, user, now, args) -> dict:
     fact = (args.get("fact") or "").strip()
     if not fact:
-        return "Nothing to remember."
-    await memory_service.remember(
-        db, llm, user_id=user.id, kind="preference", content=fact,
-        source_type="preference", commit=True)
-    return f"Got it — I'll remember that: {fact}"
+        return _info("Nothing to remember.")
+    # Best-effort: the fact is nice-to-have, so a flaky embedding shouldn't error.
+    try:
+        await memory_service.remember(
+            db, llm, user_id=user.id, kind="preference", content=fact,
+            source_type="preference", commit=True)
+    except Exception:
+        await db.rollback()
+        logging.warning("remember_fact embedding failed", exc_info=True)
+        return _info("(Noted, though I couldn't file it away permanently just now.)")
+    return _ok(f"Got it — I'll remember that: {fact}", "remembered")
 
 
 _EXECUTORS = {
@@ -374,6 +416,12 @@ async def run(
         "plainly and ask before adding another. If a time already passed today, use "
         "the next day. Older messages and the task list are context only — never "
         "re-create or re-complete something just because it appears earlier.\n"
+        "HONESTY (critical): NEVER say something was created, added, assigned, or "
+        "marked done unless you actually CALLED that tool THIS turn AND its result "
+        "confirmed success. If you didn't call the tool, nothing happened — so don't "
+        "claim it did. If a tool result says NOT ASSIGNED, ALREADY EXISTS, CONFLICT, "
+        "no match, or an error, relay that honestly and do NOT report success. It is "
+        "far better to say 'that didn't go through' than to falsely say '✅ done'.\n"
         "GOALS & MEANING: the user has bigger goals (below). When a new task ties to "
         "a goal, name the connection briefly ('nice — that's straight at your "
         "fitness goal 💪'). When they name a fresh ambition, call set_goal. Once in a "
@@ -400,12 +448,40 @@ async def run(
     messages.extend(history[-20:])
     messages.append({"role": "user", "content": message})
 
+    # Ground truth of what actually happened this turn — used to make the reply
+    # honest regardless of what the model tries to say.
+    ledger: list[dict] = []
+
+    async def _finalize(reply: str) -> dict:
+        """Guarantee the reply doesn't claim success for anything that errored out.
+        If any tool crashed, re-ask the model with an explicit failure note so it
+        tells the user plainly; fall back to a deterministic warning."""
+        failed = [l for l in ledger if not l["ok"]]
+        if failed:
+            names = ", ".join(sorted({l["tool"].replace("_", " ") for l in failed}))
+            messages.append({"role": "system", "content": (
+                f"IMPORTANT: these actions ERRORED and were NOT saved: {names}. "
+                "You MUST tell the user, in their language, that these did not go "
+                "through and to try again — do NOT say done/created/assigned for "
+                "them. Keep it short and warm.")})
+            try:
+                r2 = await chat_create(client, model, messages=messages)
+                fixed = (r2.choices[0].message.content or "").strip()
+                if fixed:
+                    return {"reply": fixed, "actions": actions}
+            except Exception:
+                logging.exception("honesty re-ask failed")
+            reply = ((reply + " ") if reply else "") + (
+                "⚠️ Something went wrong on my end and that didn't save — please "
+                "try once more.")
+        return {"reply": reply, "actions": actions}
+
     for _ in range(4):  # allow a few tool round-trips
         resp = await chat_create(
             client, model, messages=messages, tools=TOOLS, tool_choice="auto")
         msg = resp.choices[0].message
         if not msg.tool_calls:
-            return {"reply": (msg.content or "").strip(), "actions": actions}
+            return await _finalize((msg.content or "").strip())
         messages.append({
             "role": "assistant", "content": msg.content or "",
             "tool_calls": [{
@@ -419,14 +495,22 @@ async def run(
                 args = {}
             executor = _EXECUTORS.get(tc.function.name)
             try:
-                result = await executor(db, user, now, args) if executor \
-                    else f"Unknown tool {tc.function.name}."
+                out = await executor(db, user, now, args) if executor \
+                    else _fail(f"Unknown tool {tc.function.name}.")
             except Exception as e:
+                # Roll back so one failed tool can't poison later tools in the
+                # same turn (the bug behind "said done but nothing saved").
+                await db.rollback()
                 logging.exception("agent tool %s failed", tc.function.name)
-                result = f"FAILED: {type(e).__name__}: {e}"
-            actions.append({"tool": tc.function.name, "args": args, "result": result})
-            messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+                out = _fail(f"Couldn't complete {tc.function.name} ({type(e).__name__}).")
+            ledger.append({"tool": tc.function.name, "ok": out["ok"],
+                           "effect": out.get("effect")})
+            actions.append({"tool": tc.function.name, "args": args,
+                            "result": out["msg"], "ok": out["ok"],
+                            "effect": out.get("effect")})
+            messages.append({"role": "tool", "tool_call_id": tc.id,
+                             "content": out["msg"]})
 
     # Ran out of tool rounds — ask the model to wrap up in plain text.
     resp = await chat_create(client, model, messages=messages)
-    return {"reply": (resp.choices[0].message.content or "").strip(), "actions": actions}
+    return await _finalize((resp.choices[0].message.content or "").strip())
