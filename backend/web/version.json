@@ -1,7 +1,7 @@
 {
-  "latestVersionCode": 1,
-  "latestVersionName": "1.0",
+  "latestVersionCode": 2,
+  "latestVersionName": "1.1",
   "apkUrl": "https://github.com/meetmaheshin/assime/releases/latest/download/AARTH.apk",
-  "notes": "You're on the latest build.",
+  "notes": "Reminders now ring like a call even when AARTH is closed. Update to get it.",
   "mandatory": false
 }

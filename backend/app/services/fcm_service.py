@@ -45,8 +45,15 @@ async def _access_token() -> tuple[str, str]:
 
 
 async def send_to_user(db: AsyncSession, user_id, title: str, body: str,
-                       data: dict | None = None) -> int:
-    """Push to every device the user has registered. Prunes dead tokens."""
+                       data: dict | None = None, alert: str = "normal") -> int:
+    """Push to every device the user has registered. Prunes dead tokens.
+
+    Sent as a DATA-only message (no `notification` block) so the app's native
+    AarthMessagingService.onMessageReceived runs even when the app is CLOSED —
+    that's what lets `alert="call"` launch the full-screen ringing screen over
+    the lock screen. A `notification` message would only reach the tray when
+    backgrounded and never run our code.
+    """
     if not settings.fcm_enabled:
         return 0
     tokens = list(await db.scalars(
@@ -60,17 +67,17 @@ async def send_to_user(db: AsyncSession, user_id, title: str, body: str,
         return 0
     url = f"https://fcm.googleapis.com/v1/projects/{project}/messages:send"
     headers = {"Authorization": f"Bearer {access_token}"}
+    payload = {"title": title, "body": body, "alert": alert}
+    if data:
+        payload.update({k: str(v) for k, v in data.items()})
     sent, dead = 0, []
     async with httpx.AsyncClient(timeout=15) as client:
         for t in tokens:
             message = {"message": {
                 "token": t.token,
-                "notification": {"title": title, "body": body},
-                "android": {"priority": "high", "notification": {
-                    "sound": "default", "channel_id": "aarth-fcm",
-                    "default_vibrate_timings": True}}}}
-            if data:
-                message["message"]["data"] = {k: str(v) for k, v in data.items()}
+                # No `notification` block — data-only wakes our service when closed.
+                "android": {"priority": "high"},
+                "data": payload}}
             try:
                 r = await client.post(url, headers=headers, json=message)
                 if r.status_code == 200:

@@ -40,6 +40,17 @@
         <!-- Fires the call at the scheduled time (from CallPlugin's AlarmManager) -->
         <receiver android:name=".CallReceiver" android:exported="false" />
 
+        <!-- Native FCM receiver: rings full-screen for server pushes even when the
+             app is closed/killed. Declared in the app manifest so it takes
+             precedence over the Capacitor plugin's default messaging service. -->
+        <service
+            android:name=".AarthMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <!-- Home-screen widget (quick add / speak) -->
         <receiver android:name=".AarthWidget" android:exported="false">
             <intent-filter>

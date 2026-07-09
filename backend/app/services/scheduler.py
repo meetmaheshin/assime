@@ -43,7 +43,9 @@ async def _tick() -> None:
             for n in pending:
                 try:
                     if settings.fcm_enabled:
-                        await fcm_service.send_to_user(db, user.id, n.title, n.body)
+                        await fcm_service.send_to_user(
+                            db, user.id, n.title, n.body,
+                            alert=n.alert_level or "normal")
                     elif settings.push_enabled:
                         await push.push_to_user(db, user.id, n.title, n.body)
                 except Exception:

@@ -61,7 +61,7 @@ public class CallReceiver extends BroadcastReceiver {
         }
     }
 
-    private static boolean canFullScreen(Context ctx) {
+    static boolean canFullScreen(Context ctx) {
         if (Build.VERSION.SDK_INT >= 34) {
             NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
             return nm != null && nm.canUseFullScreenIntent();
@@ -69,7 +69,7 @@ public class CallReceiver extends BroadcastReceiver {
         return true;
     }
 
-    private static void ensureChannels(Context ctx) {
+    static void ensureChannels(Context ctx) {
         if (Build.VERSION.SDK_INT < 26) return;
         NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
