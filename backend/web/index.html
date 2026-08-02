@@ -425,6 +425,17 @@
               <button class="btn-sm" id="addGoalBtn" style="width:auto;padding:0 16px">Add</button>
             </div>
             <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
+            <label class="slabel">Password</label>
+            <button class="btn-sm" id="resetPwBtn" style="width:100%">Reset password</button>
+            <div id="pwBox" class="hidden" style="display:flex;flex-direction:column;gap:8px;margin-top:2px">
+              <input id="newPw" type="password" placeholder="New password (min 6 chars)" style="width:100%;font:inherit;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface2);color:var(--text)" />
+              <div style="display:flex;gap:8px">
+                <button class="btn-sm" id="pwCancel" style="flex:1">Cancel</button>
+                <button class="btn-primary" id="pwSave" style="flex:1">Save new password</button>
+              </div>
+            </div>
+            <div id="pwStatus" class="muted" style="font-size:12px;min-height:14px"></div>
+            <hr style="border:none;border-top:1px solid var(--line);margin:6px 0" />
             <label class="slabel">Your data</label>
             <div class="muted" style="font-size:13px;margin-top:-6px">Stored safely in your account — it follows you across devices and survives a reinstall.</div>
             <button class="btn-sm" id="exportBtn" style="width:100%">Export my data</button>
@@ -1338,6 +1349,23 @@ $("#inviteBtn").onclick=async()=>{
     if(navigator.share){ try{ await navigator.share({title:"Connect with me on AARTH", text:"Let's manage tasks together on AARTH:", url:r.url}); return; }catch(_){} }
     try{ await navigator.clipboard.writeText(r.url); toast("Invite link copied — paste it anywhere"); }catch(_){ toast("Long-press to copy your invite link"); }
   }catch(e){ box.textContent = e.message||"Couldn't create link."; }
+};
+/* On-screen password reset (signed-in): reveal a box, type a new password, save. */
+$("#resetPwBtn").onclick=()=>{
+  $("#pwBox").classList.remove("hidden"); $("#pwStatus").textContent="";
+  $("#newPw").value=""; $("#newPw").focus();
+};
+$("#pwCancel").onclick=()=>{ $("#pwBox").classList.add("hidden"); $("#pwStatus").textContent=""; };
+$("#pwSave").onclick=async()=>{
+  const pw=$("#newPw").value; const st=$("#pwStatus");
+  if(pw.length<6){ st.textContent="Password must be at least 6 characters."; return; }
+  st.textContent="Saving…";
+  try{
+    await api("/auth/me/password",{method:"POST",body:{new_password:pw}});
+    $("#pwBox").classList.add("hidden"); $("#newPw").value="";
+    st.textContent="✓ Password updated. Use it next time you sign in.";
+    setTimeout(()=>{ st.textContent=""; },4000);
+  }catch(e){ st.textContent=e.message||"Couldn't update password."; }
 };
 async function loadProfile(){
   const box=$("#profileBox"); if(!box) return;

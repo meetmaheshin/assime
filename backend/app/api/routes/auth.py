@@ -93,6 +93,26 @@ async def refresh_profile(
     return {"summary": await profile_service.get_summary(db, user.id)}
 
 
+class PasswordChange(BaseModel):
+    new_password: str
+
+
+@router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    payload: PasswordChange,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """On-screen password reset for a signed-in user — set a new password.
+    The valid session is the proof of identity (no email needed)."""
+    if len(payload.new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 6 characters.")
+    user.hashed_password = hash_password(payload.new_password)
+    await db.commit()
+
+
 @router.patch("/me/settings", response_model=UserOut)
 async def update_settings(
     payload: SettingsUpdate,
