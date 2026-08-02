@@ -242,6 +242,17 @@
       <div class="err" id="authErr"></div>
       <button class="btn-primary" id="authBtn">Sign in</button>
       <button class="link" id="authToggle">New here? Create an account</button>
+      <button class="link" id="forgotToggle">Forgot password?</button>
+
+      <!-- Logged-out reset: enter email + a new password -->
+      <div id="forgotBox" class="hidden" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+        <div class="muted" style="font-size:13px">Enter your email and a new password.</div>
+        <input id="fpEmail" placeholder="Email" type="email" autocomplete="email" />
+        <input id="fpPw" placeholder="New password (min 6 chars)" type="password" autocomplete="new-password" />
+        <div class="err" id="fpErr"></div>
+        <button class="btn-primary" id="fpSave">Reset password</button>
+        <button class="link" id="fpCancel">Back to sign in</button>
+      </div>
     </div>
   </div>
 
@@ -578,6 +589,32 @@ $("#authToggle").onclick=()=>{
   $("#authBtn").textContent=mode==="login"?"Sign in":"Create account";
   $("#authToggle").textContent=mode==="login"?"New here? Create an account":"Have an account? Sign in";
   $("#authErr").textContent="";
+};
+/* Forgot password (logged-out reset) */
+function showForgot(on){
+  // Hide the normal sign-in controls while the reset box is open.
+  ["email","password","authErr","authBtn","authToggle","forgotToggle"]
+    .forEach(id=>{ const el=$("#"+id); if(el) el.classList.toggle("hidden",on); });
+  // Name field: hidden while resetting; otherwise only shown in register mode.
+  $("#dnameRow").classList.toggle("hidden", on || mode==="login");
+  $("#forgotBox").classList.toggle("hidden",!on);
+  if(on){ $("#fpEmail").value=$("#email").value.trim(); $("#fpErr").textContent=""; $("#fpEmail").focus(); }
+}
+$("#forgotToggle").onclick=()=>showForgot(true);
+$("#fpCancel").onclick=()=>showForgot(false);
+$("#fpSave").onclick=async()=>{
+  const email=$("#fpEmail").value.trim(), pw=$("#fpPw").value, err=$("#fpErr");
+  err.textContent="";
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ err.textContent="Please enter a valid email address."; return; }
+  if(pw.length<6){ err.textContent="Password must be at least 6 characters."; return; }
+  const b=$("#fpSave"); b.disabled=true; b.textContent="…";
+  try{
+    await api("/auth/reset-password",{method:"POST",auth:false,body:{email,new_password:pw}});
+    showForgot(false);
+    $("#email").value=email; $("#password").value="";
+    $("#authErr").textContent="✓ Password reset. Sign in with your new password.";
+  }catch(e){ err.textContent=e.message||"Couldn't reset — check the email."; }
+  finally{ b.disabled=false; b.textContent="Reset password"; }
 };
 function validAuth(email,pw){
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Please enter a valid email address.";

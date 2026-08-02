@@ -48,6 +48,32 @@ async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)) -> Token
     return Token(access_token=create_access_token(str(user.id)))
 
 
+class PasswordReset(BaseModel):
+    email: str
+    new_password: str
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_password(
+    payload: PasswordReset, db: AsyncSession = Depends(get_db)
+) -> None:
+    """Logged-out reset: set a new password for an email. NOTE: with no email
+    verification, this trusts whoever knows the address — a stopgap for a small,
+    trusted user base. Swap in an emailed reset link to make it secure."""
+    if len(payload.new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 6 characters.")
+    user = await db.scalar(
+        select(User).where(User.email == payload.email.lower().strip()))
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account with that email.")
+    user.hashed_password = hash_password(payload.new_password)
+    await db.commit()
+
+
 @router.get("/me", response_model=UserOut)
 async def me(user: User = Depends(get_current_user)) -> User:
     return user
