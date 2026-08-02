@@ -12,7 +12,10 @@ class Settings(BaseSettings):
     # App
     env: str = "dev"
     secret_key: str = "change-me"
-    access_token_expire_minutes: int = 1440
+    # Long-lived sessions: a personal assistant should behave like WhatsApp — log
+    # in once and stay in. 365 days (there's no refresh-token flow yet, so a short
+    # expiry just meant users got silently signed out every day).
+    access_token_expire_minutes: int = 60 * 24 * 365
     jwt_algorithm: str = "HS256"
 
     # Database / cache

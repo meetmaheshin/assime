@@ -1435,7 +1435,10 @@ if("serviceWorker" in navigator){
   window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 }
 
-if(token){enterApp().catch(logout);}
+// Enter the app if we have a token. A transient startup error (network blip, a
+// 500) must NOT sign the user out — only a real 401 does that, and that's handled
+// inside api(). So we swallow other errors and keep them logged in.
+if(token){ enterApp().catch(err=>console.warn("startup issue (staying signed in)", err)); }
 </script>
 </body>
 </html>
