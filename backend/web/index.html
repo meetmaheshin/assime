@@ -573,9 +573,16 @@ function humanizeDetail(detail,fallback){
 async function api(path,{method="GET",body=null,auth=true}={}){
   const headers={}; if(body)headers["Content-Type"]="application/json";
   if(auth&&token)headers["Authorization"]="Bearer "+token;
-  let res;
-  try{res=await fetch(API+path,{method,headers,body:body?JSON.stringify(body):null});}
-  catch(_){throw new Error("Can't reach the server. Is it running?");}
+  // Mobile networks blip constantly. Auto-retry idempotent GETs a few times with
+  // backoff so a momentary drop (or a server redeploy) doesn't surface as a scary
+  // error. POSTs aren't auto-retried, to avoid double-submitting.
+  const attempts = method==="GET" ? 3 : 1;
+  let res=null, netErr=null;
+  for(let i=0;i<attempts;i++){
+    try{ res=await fetch(API+path,{method,headers,body:body?JSON.stringify(body):null}); netErr=null; break; }
+    catch(e){ netErr=e; if(i<attempts-1) await new Promise(r=>setTimeout(r,600*(i+1))); }
+  }
+  if(netErr) throw new Error("Can’t reach the server right now — check your connection and try again.");
   if(res.status===401){if(token)logout();throw new Error("Invalid email or password.");}
   const txt=await res.text(); const data=txt?JSON.parse(txt):null;
   if(!res.ok) throw new Error(humanizeDetail(data?.detail,res.statusText));
@@ -1048,7 +1055,12 @@ async function send(viaVoice){
   $("#chatlog").appendChild(typing); $("#chatlog").scrollTop=1e9;
   // Speak the reply ONLY when the user used voice — typing stays silent (saves TTS).
   try{const res=await api("/chat",{method:"POST",body:{message:msg}}); typing.remove(); addMsg("ai",res.reply,res.citations,!viaVoice); loadToday();}
-  catch(e){typing.remove(); addMsg("ai","(error: "+e.message+")",[],true);}
+  catch(e){
+    typing.remove();
+    addMsg("ai","⚠️ "+e.message,[],true);
+    // Don't lose what they typed on a blip — put it back so one tap resends.
+    if(!$("#chatInput").value.trim()) $("#chatInput").value=msg;
+  }
 }
 $("#sendBtn").onclick=()=>send();
 const chatInput=$("#chatInput");
