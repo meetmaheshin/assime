@@ -113,6 +113,10 @@
   .tour.hidden{display:none}
   .tourhole{position:absolute;border-radius:14px;border:2px solid var(--accent);
     box-shadow:0 0 0 9999px rgba(6,8,12,.82);transition:all .25s ease;pointer-events:none}
+  .pweye-wrap{position:relative;display:block;width:100%}
+  .pweye{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;
+    border:none;font-size:17px;line-height:1;cursor:pointer;padding:8px;opacity:.65}
+  .pweye:active{opacity:1}
   .tourcard{position:absolute;max-width:290px;background:var(--surface2);
     border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 16px 44px rgba(0,0,0,.55)}
   .tourtext{font-size:15px;line-height:1.45;margin-bottom:14px}
@@ -601,7 +605,7 @@ $("#authToggle").onclick=()=>{
 function showForgot(on){
   // Hide the normal sign-in controls while the reset box is open.
   ["email","password","authErr","authBtn","authToggle","forgotToggle"]
-    .forEach(id=>{ const el=$("#"+id); if(el) el.classList.toggle("hidden",on); });
+    .forEach(id=>{ const el=$("#"+id); if(el) (el.closest(".pweye-wrap")||el).classList.toggle("hidden",on); });
   // Name field: hidden while resetting; otherwise only shown in register mode.
   $("#dnameRow").classList.toggle("hidden", on || mode==="login");
   $("#forgotBox").classList.toggle("hidden",!on);
@@ -1511,6 +1515,23 @@ $("#saveSettings").onclick=async()=>{
 if("serviceWorker" in navigator){
   window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 }
+
+// Add a show/hide eye to every password field (login, Settings reset, forgot).
+function addPasswordEyes(){
+  document.querySelectorAll('input[type="password"]').forEach(inp=>{
+    if(inp.dataset.eye) return; inp.dataset.eye="1";
+    const wrap=document.createElement("span"); wrap.className="pweye-wrap";
+    inp.parentNode.insertBefore(wrap, inp); wrap.appendChild(inp);
+    inp.style.paddingRight="42px";                       // room for the icon
+    const btn=document.createElement("button");
+    btn.type="button"; btn.className="pweye"; btn.textContent="👁";
+    btn.setAttribute("aria-label","Show password");
+    btn.onclick=()=>{ const hidden=inp.type==="password";
+      inp.type=hidden?"text":"password"; btn.textContent=hidden?"🙈":"👁"; };
+    wrap.appendChild(btn);
+  });
+}
+addPasswordEyes();
 
 // Enter the app if we have a token. A transient startup error (network blip, a
 // 500) must NOT sign the user out — only a real 401 does that, and that's handled
