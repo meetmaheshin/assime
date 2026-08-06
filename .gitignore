@@ -2,7 +2,6 @@
 .DS_Store
 Thumbs.db
 .idea/
-.vscode/
 *.iml
 *.swp
 
@@ -42,3 +41,7 @@ env/
 *.log
 node_modules/
 dist/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore

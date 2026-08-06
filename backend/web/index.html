@@ -1513,7 +1513,14 @@ $("#saveSettings").onclick=async()=>{
 
 /* Service worker — HTML caching only (network-first). */
 if("serviceWorker" in navigator){
-  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+  // When a new service worker takes control (after we ship an update), reload once
+  // so the user immediately gets the latest UI instead of a stale cached screen.
+  let _swReloaded=false;
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{
+    if(_swReloaded) return; _swReloaded=true; location.reload();
+  });
+  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js")
+    .then(reg=>{ try{ reg.update(); }catch(_){} }).catch(()=>{}));
 }
 
 // Add a show/hide eye to every password field (login, Settings reset, forgot).
