@@ -1,0 +1,92 @@
+name: Config integrity
+
+# Fails the build if an obfuscated loader has been appended to a build-time
+# config file (postcss / tailwind / vite / next / rollup / webpack / svelte).
+#
+# Background: an Ethereum-based loader was injected into these configs across
+# many repos between 2025-08 and 2026-08. It hides behind ~500 spaces of padding
+# on an otherwise normal line, adds a `createRequire` shim to smuggle require()
+# into an ESM config, and pulls its second stage off-chain. Because the bundler
+# loads these files, it executed on every dev run and every build.
+#
+# Detection here is STRUCTURAL, not signature-based: a second variant used a
+# different obfuscator that name-based signatures miss entirely. These checks
+# describe what a hand-written config looks like, so a new obfuscator gets no
+# free pass.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan build configs
+        shell: bash
+        run: |
+          # NOTE: GitHub runs this with `bash -e -o pipefail`. `grep` exits 1
+          # when it finds nothing, which is the NORMAL case for a clean file, so
+          # every counting grep must swallow that or errexit aborts the step and
+          # a healthy repo reports failure. Hence the `|| true` inside braces.
+          set +e
+          fail=0
+
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            size=$(wc -c < "$f" | tr -d ' ')
+            maxline=$(awk '{ if (length($0) > m) m = length($0) } END { print m+0 }' "$f")
+            hexesc=$( { grep -o '\\x[0-9a-fA-F][0-9a-fA-F]' "$f" 2>/dev/null || true; } | wc -l | tr -d ' ')
+            longid=$( { grep -oE '\b[A-Za-z_$][A-Za-z0-9_$]{15,}\b' "$f" 2>/dev/null || true; } | wc -l | tr -d ' ')
+            base=$(basename "$f")
+
+            # A payload is hidden past the right edge of the editor. Nothing
+            # hand-written comes close; real configs top out near 130 chars.
+            if [ "$maxline" -gt 500 ]; then
+              echo "::error file=$f::line of $maxline chars - payload hidden past the right edge"
+              fail=1
+            fi
+            # Mangled-name obfuscators emit hundreds of long identifiers.
+            if [ "$longid" -gt 50 ]; then
+              echo "::error file=$f::$longid long identifiers - name-mangling obfuscator"
+              fail=1
+            fi
+            # \x20-style escapes used to defeat plain grep.
+            if [ "$hexesc" -gt 10 ]; then
+              echo "::error file=$f::$hexesc hex escapes - string obfuscation"
+              fail=1
+            fi
+            # A postcss config is ~81 bytes. Anything larger is not a config.
+            case "$base" in
+              postcss.config.*)
+                if [ "$size" -gt 500 ]; then
+                  echo "::error file=$f::$size bytes (a real postcss config is ~81)"
+                  fail=1
+                fi
+                ;;
+            esac
+            # `createRequire` exists in these files only to smuggle require()
+            # into an ESM config so a payload can reach node builtins.
+            if grep -qE 'createRequire\s*\(' "$f" 2>/dev/null; then
+              echo "::error file=$f::createRequire in a build config - require smuggling"
+              fail=1
+            fi
+          done < <(find . -type d \( -name node_modules -o -name .git -o -name dist -o -name build -o -name .next \) -prune -o \
+                        -type f \( -name 'postcss.config.*' -o -name 'tailwind.config.*' -o -name 'vite.config.*' \
+                                   -o -name 'next.config.*' -o -name 'rollup.config.*' -o -name 'webpack.config.*' \
+                                   -o -name 'svelte.config.*' \) -print)
+
+          if [ "$fail" -ne 0 ]; then
+            echo ""
+            echo "Build-config integrity check FAILED."
+            echo "Do not build or run this code. A build config matches known malware."
+            echo "A clean postcss.config is ~81 bytes: the tailwindcss + autoprefixer export."
+            exit 1
+          fi
+          echo "Build configs clean."
